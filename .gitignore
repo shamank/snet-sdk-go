@@ -1,0 +1,17 @@
+.gitconfig
+venv
+env
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+go.work
+go.work.sum
+.env
+.idea
+.vscode
+*.pb.go
