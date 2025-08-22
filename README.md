@@ -2,19 +2,21 @@
 
 Golang SDK for the SingularityNet AI marketplace ecosystem
 
+Go 1.24+
+
 ### Supported features
 
-| Feature                     | Status           | Tests   | Notes  |
-|-----------------------------|----------------- |-------- |--------|
-| Smart contract bindings     | ✅ Done         | ⚪ TODO | ABIGEN |
-| IPFS support                | ✅ Done         | ⚪ TODO |        |
-| Lighthouse support          | ✅ Done         | ⚪ TODO |        |
-| gRPC dynamic proto fetching | 🔄 In Progress  | ⚪ TODO |        |
-| Payment strategy: free-call | ✅ Done         | ⚪ TODO |        |
-| Payment strategy: paid-call | 🔄 In Progress  | ⚪ TODO |        |
-| Payment strategy: pre-paid  | 🔄 In Progress  | ⚪ TODO |        |
-| Training support            | 🔄 In Progress  | ⚪ TODO |        |
-| Example projects & demos    | 🔄 In Progress  | ⚪ TODO |        |
+| Feature                     | Status         | Tests  | Notes |
+|-----------------------------|----------------|--------|-------|
+| Smart contract bindings     | ✅ Done         | ⚪ TODO |       |
+| IPFS support                | ✅ Done         | ⚪ TODO |       |
+| Lighthouse support          | ✅ Done         | ⚪ TODO |       |
+| gRPC dynamic proto fetching | ✅ Done         | ⚪ TODO |       |
+| Payment strategy: free-call | ✅ Done         | ⚪ TODO |       |
+| Payment strategy: paid-call | 🔄 Testing     | ⚪ TODO |       |
+| Payment strategy: pre-paid  | 🔄 In Progress | ⚪ TODO |       |
+| Training support            | 🔄 In Progress | ⚪ TODO |       |
+| Examples                    | 🔄 In Progress | -      |       |
 
 ---
 
@@ -22,25 +24,21 @@ Golang SDK for the SingularityNet AI marketplace ecosystem
 
 ```plaintext
 snet-sdk-go/
-├── cmd/                          # Packages for the CLI application
+├── cmd/                          
 │   ├── generate-smart-binds/     # Smart contract bindings generator
-│   │   └── main.go               # Entry point for the generator
-│   └── example/                  # Example of using the SDK as a CLI
-│       └── main.go               # Demo main
+│   └────  main.go                # Entry point for the generator
+├── examples/                     # Examples of using the SDK
+│     
 │
 ├── pkg/                          # Public packages (for SDK users)
 │   ├── config/                   # Configuration loading and validation
-│   ├── blockchain/               # Smart contract calls (go-ethereum)
-│   ├── storage/                  # IPFS & Lighthouse (Filecoin) clients
+│   ├── blockchain/               # Smart contract calls
+│   ├── storage/                  # IPFS & Lighthouse support
 │   ├── grpc/                     # gRPC service generation and invocation
-│   ├── payment/                  # Payment strategies (Strategy Pattern)
-│   ├── model/                    # (optional) domain models
+│   ├── payment/                  # Payment strategies
+│   ├── model/                    # Common structures
 │   └── sdk/                      # High-level SDK facade
-│       └── sdk.go
-│
-├── internal/                     # Internal utilities (not for public import)
-│
-├── scripts/                      # Scripts for generation, CI, pre-commit, etc.
-│
+│   └── training/                 # Training support
+│       
 ├── go.mod
 └── README.md
