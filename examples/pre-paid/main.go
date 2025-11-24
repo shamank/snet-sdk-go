@@ -33,7 +33,7 @@ func main() {
 		return
 	}
 
-	resp, err := service.CallWithMap("basic_stt", map[string]any{"text": "1"})
+	resp, err := service.CallWithMap("", map[string]any{"text": "1"})
 	if err != nil {
 		log.Println(err)
 		return

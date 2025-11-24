@@ -9,10 +9,11 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/bufbuild/protocompile/linker"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
+	oggrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -24,7 +25,7 @@ import (
 // set of compiled file descriptors used to locate services/methods at runtime.
 type Client struct {
 	// GRPC is the underlying client connection.
-	GRPC *grpc.ClientConn `json:"-"`
+	GRPC *oggrpc.ClientConn `json:"-"`
 	// ProtoFiles are the compiled descriptors of the provided .proto sources.
 	ProtoFiles linker.Files `json:"-"`
 }
@@ -41,7 +42,7 @@ type Client struct {
 // starts connecting (ClientConn.Connect()).
 func NewClient(endpoint string, protoFiles map[string]string) *Client {
 	addr, creds := grpcCredsFromEndpoint(endpoint)
-	conn, err := grpc.NewClient(addr, creds)
+	conn, err := oggrpc.NewClient(addr, creds)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return nil
@@ -151,12 +152,27 @@ func (c *Client) CallWithJSON(ctx context.Context, method string, body []byte) (
 
 // grpcCredsFromEndpoint derives a dial address and dial option from an endpoint URL.
 // "https://" enables TLS; "http://" and bare addresses use insecure credentials.
-func grpcCredsFromEndpoint(endpoint string) (string, grpc.DialOption) {
+func grpcCredsFromEndpoint(endpoint string) (string, oggrpc.DialOption) {
 	if strings.HasPrefix(endpoint, "https://") {
-		return strings.TrimPrefix(endpoint, "https://"), grpc.WithTransportCredentials(credentials.NewTLS(nil))
+		return strings.TrimPrefix(endpoint, "https://"), oggrpc.WithTransportCredentials(credentials.NewTLS(nil))
 	}
 	if strings.HasPrefix(endpoint, "http://") {
-		return strings.TrimPrefix(endpoint, "http://"), grpc.WithTransportCredentials(insecure.NewCredentials())
+		return strings.TrimPrefix(endpoint, "http://"), oggrpc.WithTransportCredentials(insecure.NewCredentials())
 	}
-	return endpoint, grpc.WithTransportCredentials(insecure.NewCredentials())
+	return endpoint, oggrpc.WithTransportCredentials(insecure.NewCredentials())
+}
+
+// DialEndpoint dials a gRPC endpoint URL (http://, https://, or bare "host:port")
+// respecting the given context and timeout. It sets appropriate transport
+// credentials based on the scheme and uses WithBlock to honor the deadline.
+func DialEndpoint(ctx context.Context, endpoint string, timeout time.Duration, opts ...oggrpc.DialOption) (*oggrpc.ClientConn, error) {
+	addr, cred := grpcCredsFromEndpoint(endpoint)
+	base := []oggrpc.DialOption{cred, oggrpc.WithBlock()}
+	base = append(base, opts...)
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	return oggrpc.DialContext(ctx, addr, base...)
 }

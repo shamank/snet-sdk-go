@@ -6,17 +6,17 @@ Go 1.24+
 
 ### Supported features
 
-| Feature                     | Status         | Tests  | Notes |
-|-----------------------------|----------------|--------|-------|
-| Smart contract bindings     | ✅ Done         | ⚪ TODO |       |
-| IPFS support                | ✅ Done         | ⚪ TODO |       |
-| Lighthouse support          | ✅ Done         | ⚪ TODO |       |
-| gRPC dynamic proto fetching | ✅ Done         | ⚪ TODO |       |
-| Payment strategy: free-call | ✅ Done         | ⚪ TODO |       |
-| Payment strategy: paid-call | 🔄 Testing     | ⚪ TODO |       |
-| Payment strategy: pre-paid  | 🔄 In Progress | ⚪ TODO |       |
-| Training support            | 🔄 In Progress | ⚪ TODO |       |
-| Examples                    | 🔄 In Progress | -      |       |
+| Feature                     | Status         |
+|-----------------------------|----------------|
+| Smart contract bindings     | ✅ Done         |  
+| IPFS support                | ✅ Done         | 
+| Lighthouse support          | ✅ Done         | 
+| gRPC dynamic proto fetching | ✅ Done         | 
+| Payment strategy: free-call | ✅ Done         | 
+| Payment strategy: paid-call | ✅ Done         |
+| Payment strategy: pre-paid  | ✅ Done         |
+| Training support            | 🔄 In Progress  |
+| Examples                    | ✅ Done         |
 
 ---
 

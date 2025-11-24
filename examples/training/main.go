@@ -25,23 +25,21 @@ func main() {
 		return
 	}
 
-	train := service.TrainingClient()
-
-	metadata, err := train.GetMetadata()
+	metadata, err := service.Training().GetMetadata()
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	fmt.Printf("\nmetadata: %v", metadata)
 
-	m, err := train.CreateModel("test", "test")
+	m, err := service.Training().CreateModel("test", "test")
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	fmt.Printf("\nmetadata: %v", m)
 
-	models, err := train.GetAllModels()
+	models, err := service.Training().GetAllModels()
 	if err != nil {
 		log.Println(err)
 		return

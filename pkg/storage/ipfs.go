@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -90,24 +91,38 @@ func isGzipFile(data []byte) bool {
 	return len(data) > 2 && data[0] == 0x1F && data[1] == 0x8B
 }
 
-// GetFileFromIPFS fetches content by CID from IPFS using the configured
+// ipfsFetcher is the concrete implementation of IPFSFetcher using Kubo HTTP API.
+type ipfsFetcher struct {
+	api *rpc.HttpApi
+}
+
+// newIPFSFetcher creates a new IPFS fetcher with the given HTTP API client.
+func newIPFSFetcher(api *rpc.HttpApi) IPFSFetcher {
+	return &ipfsFetcher{api: api}
+}
+
+// Fetch fetches content by CID from IPFS using the configured
 // Kubo HTTP API client. The supplied hash is normalized via formatHash,
 // parsed as a CID, and retrieved via `ipfs cat`. The method then performs
 // a best-effort verification by recomputing a CID from (original CID bytes +
 // content) and comparing it with the requested CID.
 //
 // On success, it returns the file contents.
-func (s *Storage) GetFileFromIPFS(hash string) (content []byte, err error) {
+func (f *ipfsFetcher) Fetch(hash string) (content []byte, err error) {
 	hash = formatHash(hash)
 
 	zap.L().Debug("Hash Used to retrieve from IPFS", zap.String("hash", hash))
+
+	if f.api == nil {
+		return nil, fmt.Errorf("ipfs client not configured")
+	}
 
 	cID, err := cid.Parse(hash)
 	if err != nil {
 		zap.L().Error("error parsing the ipfs hash", zap.String("hashFromMetaData", hash), zap.Error(err))
 	}
 
-	req := s.HttpApi.Request("cat", cID.String())
+	req := f.api.Request("cat", cID.String())
 	if err != nil {
 		zap.L().Error("error executing the cat command in ipfs", zap.String("hashFromMetaData", hash), zap.Error(err))
 		return
@@ -149,6 +164,84 @@ func (s *Storage) GetFileFromIPFS(hash string) (content []byte, err error) {
 	}
 
 	return fileContent, err
+}
+
+// GetFileFromIPFS fetches content by CID from IPFS using the configured
+// backend fetcher. It is kept for backward compatibility.
+func (c *Client) GetFileFromIPFS(hash string) ([]byte, error) {
+	if c.ipfsFetcher == nil {
+		c.ipfsFetcher = newIPFSFetcher(c.HttpApi)
+	}
+	return c.ipfsFetcher.Fetch(hash)
+}
+
+// UploadJSON serializes data to JSON and uploads it to IPFS.
+// Returns the IPFS URI (ipfs://<hash>) on success.
+func (c *Client) UploadJSON(data interface{}) (string, error) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		zap.L().Error("error marshaling data to json", zap.Error(err))
+		return "", fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+
+	if c.ipfsFetcher == nil {
+		c.ipfsFetcher = newIPFSFetcher(c.HttpApi)
+	}
+
+	// Cast to access Upload method (we'll need to add this to the interface)
+	uploader, ok := c.ipfsFetcher.(*ipfsFetcher)
+	if !ok {
+		return "", fmt.Errorf("ipfs fetcher does not support uploads")
+	}
+
+	return uploader.Upload(jsonData)
+}
+
+// Upload uploads data to IPFS and returns the IPFS URI (ipfs://<hash>).
+// The data is added using the IPFS HTTP API 'add' command.
+func (f *ipfsFetcher) Upload(data []byte) (string, error) {
+	if f.api == nil {
+		return "", fmt.Errorf("ipfs client not configured")
+	}
+
+	reader := bytes.NewReader(data)
+	req := f.api.Request("add")
+	req.Body(reader)
+
+	resp, err := req.Send(context.Background())
+	if err != nil {
+		zap.L().Error("error uploading to ipfs", zap.Error(err))
+		return "", err
+	}
+	defer func(resp *rpc.Response) {
+		err = resp.Close()
+		if err != nil {
+			zap.L().Error("error closing ipfs response", zap.Error(err))
+		}
+	}(resp)
+
+	if resp.Error != nil {
+		zap.L().Error("ipfs add command returned error", zap.Error(resp.Error))
+		return "", resp.Error
+	}
+
+	// Read and parse the response
+	body, err := io.ReadAll(resp.Output)
+	if err != nil {
+		zap.L().Error("error reading ipfs add response", zap.Error(err))
+		return "", err
+	}
+
+	var addResp struct {
+		Hash string `json:"Hash"`
+	}
+	if err := json.Unmarshal(body, &addResp); err != nil {
+		zap.L().Error("error unmarshaling ipfs add response", zap.Error(err))
+		return "", err
+	}
+
+	zap.L().Debug("Successfully uploaded to IPFS", zap.String("hash", addResp.Hash))
+	return IpfsPrefix + addResp.Hash, nil
 }
 
 // NewIPFSClient constructs a Kubo HTTP API client pointed at url. The client

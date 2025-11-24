@@ -15,6 +15,7 @@ func main() {
 		// You can unfill the private key if you do not want to call the services
 		PrivateKey: "",
 		Debug:      true,
+		Network:    config.Sepolia,
 	}
 
 	// creating a new SDK core
@@ -39,7 +40,7 @@ func main() {
 	}
 	fmt.Printf("\nFree calls available: %v", available)
 
-	resp, err := service.CallWithMap("basic_stt", map[string]any{"text": "1"})
+	resp, err := service.CallWithMap("", map[string]any{"text": "test"})
 	if err != nil {
 		log.Println(err)
 		return

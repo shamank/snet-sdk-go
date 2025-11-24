@@ -1,18 +1,21 @@
+// Package payment defines constants for gRPC metadata headers used in
+// SingularityNET daemon payment and authentication flows.
 package payment
 
 const (
+	// PrefixInSignature is the message prefix used for MPE claim signatures.
 	PrefixInSignature = "__MPE_claim_message"
-	// Agreed constant value.
+	// FreeCallPrefixSignature is the agreed constant value for free trial signatures.
 	FreeCallPrefixSignature = "__prefix_free_trial"
-	// PaymentTypeHeader is a type of payment used to pay for a RPC call.
+	// PaymentTypeHeader is the gRPC metadata key for the type of payment used for an RPC call.
 	// Supported types are: "escrow".
-	// Note: "job" PaymentDetails type is deprecated
+	// Note: "job" PaymentDetails type is deprecated.
 	PaymentTypeHeader = "snet-payment-type"
-	// Client that calls the Daemon ( example can be "snet-cli","snet-dapp","snet-sdk")
+	// ClientTypeHeader identifies the client making the call (e.g., "snet-cli", "snet-dapp", "snet-sdk").
 	ClientTypeHeader = "snet-client-type"
-	// Value is a user address , example "0x94d04332C4f5273feF69c4a52D24f42a3aF1F207"
+	// UserInfoHeader contains the user's Ethereum address (e.g., "0x94d04332C4f5273feF69c4a52D24f42a3aF1F207").
 	UserInfoHeader = "snet-user-info"
-	// User Agent details set in on the server stream info
+	// UserAgentHeader contains user agent details set in the server stream info.
 	UserAgentHeader = "user-agent"
 	// PaymentChannelIDHeader is a MultiPartyEscrow contract payment channel
 	// id. Value is a string containing a decimal number.
@@ -27,33 +30,35 @@ const (
 	// PaymentChannelSignatureHeader is a signature of the client to confirm
 	// amount withdrawing authorization. Value is an array of bytes.
 	PaymentChannelSignatureHeader = "snet-payment-channel-signature-bin"
-	// This is useful information in the header sent in by the client
-	// All clients will have this information and they need this to Sign anyways
-	// When Daemon is running in the block chain disabled mode , it would use this
-	// header to get the MPE address. The goal here is to keep the client oblivious to the
-	// Daemon block chain enabled or disabled mode and also standardize the signatures.
-	// id. Value is a string containing a decimal number.
+	// PaymentMultiPartyEscrowAddressHeader contains the MPE contract address.
+	// This is useful when the daemon is running in blockchain-disabled mode,
+	// allowing the client to remain oblivious to the daemon's mode while
+	// standardizing signatures. Value is a string containing a decimal number.
 	PaymentMultiPartyEscrowAddressHeader = "snet-payment-mpe-address"
 
-	// Added for free call support in Daemon
+	// Free call support headers
 
-	// The user Id of the person making the call
-	FreeCallUserIdHeader      = "snet-free-call-user-id"
+	// FreeCallUserIdHeader contains the user ID of the person making the free call.
+	FreeCallUserIdHeader = "snet-free-call-user-id"
+	// FreeCallUserAddressHeader contains the user's Ethereum address for free calls.
 	FreeCallUserAddressHeader = "snet-free-call-user-address"
 
-	// Will be used to check if the Signature is still valid
+	// CurrentBlockNumberHeader is used to verify if the signature is still valid.
 	CurrentBlockNumberHeader = "snet-current-block-number"
 
-	// Place holder to set the free call Auth FetchToken issued
+	// FreeCallAuthTokenHeader contains the free call authentication token issued by the daemon.
 	FreeCallAuthTokenHeader = "snet-free-call-auth-token-bin"
-	// Block number on when the FetchToken was issued , to track the expiry of the token , which is ~ 1 Month
+	// FreeCallAuthTokenExpiryBlockNumberHeader contains the block number when the token was issued,
+	// used to track token expiry (typically ~1 month).
 	FreeCallAuthTokenExpiryBlockNumberHeader = "snet-free-call-token-expiry-block"
 
-	// Users may decide to sign upfront and make calls .Daemon generates and Auth FetchToken
-	// Users/Clients will need to use this token to make calls for the amount signed upfront.
+	// PrePaidAuthTokenHeader contains the prepaid authentication token.
+	// Users may sign upfront and make calls using this token for the amount signed.
 	PrePaidAuthTokenHeader = "snet-prepaid-auth-token-bin"
 
+	// DynamicPriceDerived contains the derived dynamic price cost.
 	DynamicPriceDerived = "snet-derived-dynamic-price-cost"
 
+	// TrainingModelId contains the training model identifier.
 	TrainingModelId = "snet-train-model-id"
 )

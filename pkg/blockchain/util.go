@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"encoding/binary"
 	"errors"
@@ -134,4 +135,44 @@ func uint64ToBytes(val uint64) []byte {
 	buf := make([]byte, 8)
 	binary.BigEndian.PutUint64(buf, val)
 	return buf
+}
+
+// StringToBytes32 returns a right-padded [32]byte containing at most the first
+// 32 bytes of the provided string.
+func StringToBytes32(str string) [32]byte {
+	var byte32 [32]byte
+	copy(byte32[:], str)
+	return byte32
+}
+
+// GetSignature produces an Ethereum-compatible personal-sign (EIP-191 style)
+// signature over the given message. It hashes the payload as
+// keccak256("\x19Ethereum Signed Message:\n32" || keccak256(message)) and
+// signs with the provided ECDSA private key.
+//
+// Returns the 65-byte signature (R||S||V). On signing error it logs and returns nil.
+func GetSignature(message []byte, privateKeyECDSA *ecdsa.PrivateKey) []byte {
+	hash := crypto.Keccak256(
+		HashPrefix32Bytes,
+		crypto.Keccak256(message),
+	)
+
+	signature, err := crypto.Sign(hash, privateKeyECDSA)
+	if err != nil {
+		zap.L().Error("Failed to sign message", zap.Error(err))
+	}
+
+	return signature
+}
+
+// Bytes32ArrayToStrings converts an array of [32]byte values into a slice of strings,
+// trimming trailing NUL bytes on the right of each element.
+func Bytes32ArrayToStrings(arr [][32]byte) []string {
+	result := make([]string, len(arr))
+	for i, b := range arr {
+		// b[:] is the 32-byte slice; trim trailing '\x00'.
+		clean := bytes.TrimRight(b[:], "\x00")
+		result[i] = string(clean)
+	}
+	return result
 }

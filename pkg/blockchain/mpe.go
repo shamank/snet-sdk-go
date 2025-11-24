@@ -2,7 +2,6 @@ package blockchain
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -140,8 +139,8 @@ func waitDeposit(ctx context.Context, ch <-chan *MultiPartyEscrowDepositFunds, e
 // FilterChannels scans ChannelOpen events with given filters and returns the latest matching event
 // for (sender == signer == senders[0], recipient == recipients[0], groupID == groupIDs[0]) if any.
 // The iterator is closed regardless of path; caller owns filterOpts lifecycle.
-func (eth *EVMClient) FilterChannels(senders, recipients []common.Address, groupIDs [][32]byte, filterOpts *bind.FilterOpts) (*MultiPartyEscrowChannelOpen, error) {
-	it, err := eth.MPE.FilterChannelOpen(filterOpts, senders, recipients, groupIDs)
+func (evm *EVMClient) FilterChannels(senders, recipients []common.Address, groupIDs [][32]byte, filterOpts *bind.FilterOpts) (*MultiPartyEscrowChannelOpen, error) {
+	it, err := evm.MPE.FilterChannelOpen(filterOpts, senders, recipients, groupIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -193,16 +192,6 @@ func GetFilterOpts(currentBlockNumber *big.Int, ctx context.Context) *bind.Filte
 	return &bind.FilterOpts{Start: 0, End: &end, Context: ctx}
 }
 
-// GetTransactOpts creates a transactor bound to the given chainID and ECDSA key.
-func GetTransactOpts(chainID *big.Int, pk *ecdsa.PrivateKey) (*bind.TransactOpts, error) {
-	opts, err := bind.NewKeyedTransactorWithChainID(pk, chainID)
-	if err != nil {
-		zap.L().Error("failed to create transactor", zap.Error(err))
-		return nil, err
-	}
-	return opts, nil
-}
-
 // GetNewExpiration returns a new expiration block = current + threshold + small offset.
 // The extra offset (240 blocks) gives a buffer to avoid near-expiry channels.
 func GetNewExpiration(currentBlockNumber, threshold *big.Int) *big.Int {
@@ -212,10 +201,10 @@ func GetNewExpiration(currentBlockNumber, threshold *big.Int) *big.Int {
 
 // watchChannelOpen subscribes to ChannelOpen events with a context-aware WatchOpts.
 // If errc is non-nil, subscription errors are forwarded there.
-func (eth *EVMClient) watchChannelOpen(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowChannelOpen, errc chan error, senders, recipients []common.Address, groupIDs [][32]byte) (event.Subscription, error) {
+func (evm *EVMClient) watchChannelOpen(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowChannelOpen, errc chan error, senders, recipients []common.Address, groupIDs [][32]byte) (event.Subscription, error) {
 	w := *watch
 	w.Context = ctx
-	sub, err := eth.MPE.WatchChannelOpen(&w, out, senders, recipients, groupIDs)
+	sub, err := evm.MPE.WatchChannelOpen(&w, out, senders, recipients, groupIDs)
 	if err != nil {
 		if errc != nil {
 			errc <- err
@@ -237,10 +226,10 @@ func (eth *EVMClient) watchChannelOpen(ctx context.Context, watch *bind.WatchOpt
 }
 
 // watchDepositFunds subscribes to DepositFunds events and forwards errors to errc if provided.
-func (eth *EVMClient) watchDepositFunds(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowDepositFunds, errc chan error, senders []common.Address) (event.Subscription, error) {
+func (evm *EVMClient) watchDepositFunds(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowDepositFunds, errc chan error, senders []common.Address) (event.Subscription, error) {
 	w := *watch
 	w.Context = ctx
-	sub, err := eth.MPE.WatchDepositFunds(&w, out, senders)
+	sub, err := evm.MPE.WatchDepositFunds(&w, out, senders)
 	if err != nil {
 		if errc != nil {
 			errc <- err
@@ -262,10 +251,10 @@ func (eth *EVMClient) watchDepositFunds(ctx context.Context, watch *bind.WatchOp
 }
 
 // watchChannelAddFunds subscribes to ChannelAddFunds events and forwards errors to errc if provided.
-func (eth *EVMClient) watchChannelAddFunds(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowChannelAddFunds, errc chan error, channelIDs []*big.Int) (event.Subscription, error) {
+func (evm *EVMClient) watchChannelAddFunds(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowChannelAddFunds, errc chan error, channelIDs []*big.Int) (event.Subscription, error) {
 	w := *watch
 	w.Context = ctx
-	sub, err := eth.MPE.WatchChannelAddFunds(&w, out, channelIDs)
+	sub, err := evm.MPE.WatchChannelAddFunds(&w, out, channelIDs)
 	if err != nil {
 		if errc != nil {
 			errc <- err
@@ -287,10 +276,10 @@ func (eth *EVMClient) watchChannelAddFunds(ctx context.Context, watch *bind.Watc
 }
 
 // watchChannelExtend subscribes to ChannelExtend events and forwards errors to errc if provided.
-func (eth *EVMClient) watchChannelExtend(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowChannelExtend, errc chan error, channelIDs []*big.Int) (event.Subscription, error) {
+func (evm *EVMClient) watchChannelExtend(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowChannelExtend, errc chan error, channelIDs []*big.Int) (event.Subscription, error) {
 	w := *watch
 	w.Context = ctx
-	sub, err := eth.MPE.WatchChannelExtend(&w, out, channelIDs)
+	sub, err := evm.MPE.WatchChannelExtend(&w, out, channelIDs)
 	if err != nil {
 		if errc != nil {
 			errc <- err
@@ -314,8 +303,8 @@ func (eth *EVMClient) watchChannelExtend(ctx context.Context, watch *bind.WatchO
 // getChannelStateFromBlockchain returns a channel snapshot from MPE.Channels.
 // It returns (nil,false,err) on read error, (nil,false,err) if the record looks empty,
 // or (channel,true,nil) on success.
-func (eth *EVMClient) getChannelStateFromBlockchain(channelID *big.Int) (*MultiPartyEscrowChannel, bool, error) {
-	ch, err := eth.MPE.Channels(nil, channelID)
+func (evm *EVMClient) getChannelStateFromBlockchain(channelID *big.Int) (*MultiPartyEscrowChannel, bool, error) {
+	ch, err := evm.MPE.Channels(nil, channelID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -337,8 +326,8 @@ func (eth *EVMClient) getChannelStateFromBlockchain(channelID *big.Int) (*MultiP
 }
 
 // GetCurrentBlockNumberCtx returns the latest block number using the provided context.
-func (eth *EVMClient) GetCurrentBlockNumberCtx(ctx context.Context) (*big.Int, error) {
-	header, err := eth.Client.HeaderByNumber(ctx, nil)
+func (evm *EVMClient) GetCurrentBlockNumberCtx(ctx context.Context) (*big.Int, error) {
+	header, err := evm.Client.HeaderByNumber(ctx, nil)
 	if err != nil {
 		zap.L().Error("failed to get last block number", zap.Error(err))
 		return nil, err
@@ -349,10 +338,10 @@ func (eth *EVMClient) GetCurrentBlockNumberCtx(ctx context.Context) (*big.Int, e
 // WaitForTransaction polls for a transaction receipt with exponential backoff,
 // until receipt is available, context is done, or an error occurs. If maxBackoff
 // is non-zero, backoff will not exceed it. It returns an error if the tx is reverted.
-func (eth *EVMClient) WaitForTransaction(ctx context.Context, txHash common.Hash, maxBackoff time.Duration) (*types.Receipt, error) {
+func (evm *EVMClient) WaitForTransaction(ctx context.Context, txHash common.Hash, maxBackoff time.Duration) (*types.Receipt, error) {
 	backoff := time.Second
 	for {
-		receipt, err := eth.Client.TransactionReceipt(ctx, txHash)
+		receipt, err := evm.Client.TransactionReceipt(ctx, txHash)
 		switch {
 		case err == nil:
 			if receipt.Status == types.ReceiptStatusFailed {
@@ -377,8 +366,8 @@ func (eth *EVMClient) WaitForTransaction(ctx context.Context, txHash common.Hash
 }
 
 // GetMPEBalance returns MPE internal balance for callOpts.From.
-func (eth *EVMClient) GetMPEBalance(callOpts *bind.CallOpts) (*big.Int, error) {
-	bal, err := eth.MPE.Balances(callOpts, callOpts.From)
+func (evm *EVMClient) GetMPEBalance(callOpts *bind.CallOpts) (*big.Int, error) {
+	bal, err := evm.MPE.Balances(callOpts, callOpts.From)
 	if err != nil {
 		return nil, err
 	}
@@ -393,19 +382,19 @@ func estimateGas(wallet *bind.TransactOpts) *bind.TransactOpts {
 
 // ensureAllowance checks token allowance(owner→spender) and, if insufficient,
 // submits Approve(max) and waits for the tx to be mined (with a 30s max backoff).
-func (eth *EVMClient) ensureAllowance(ctx context.Context, owner, spender common.Address, need *big.Int, call *bind.CallOpts, txOpts *bind.TransactOpts) error {
-	allowance, err := eth.FetchToken.Allowance(call, owner, spender)
+func (evm *EVMClient) ensureAllowance(ctx context.Context, owner, spender common.Address, need *big.Int, call *bind.CallOpts, txOpts *bind.TransactOpts) error {
+	allowance, err := evm.FetchToken.Allowance(call, owner, spender)
 	if err != nil {
 		return err
 	}
 	if allowance != nil && allowance.Cmp(need) >= 0 {
 		return nil
 	}
-	tx, err := eth.FetchToken.Approve(txOpts, spender, maxUint256)
+	tx, err := evm.FetchToken.Approve(txOpts, spender, maxUint256)
 	if err != nil {
 		return err
 	}
-	_, err = eth.WaitForTransaction(ctx, tx.Hash(), 30*time.Second)
+	_, err = evm.WaitForTransaction(ctx, tx.Hash(), 30*time.Second)
 	return err
 }
 
@@ -417,44 +406,44 @@ func availableAmount(onchainValue, currentSigned *big.Int) *big.Int {
 // EnsurePaymentChannel guarantees there is a valid channel (sufficient funds and expiration)
 // for (sender, recipient, groupID). It may deposit/open/extend/addFunds as needed,
 // waiting for corresponding events. Returns the channel ID or an error.
-func (eth *EVMClient) EnsurePaymentChannel(mpe common.Address, filtered *MultiPartyEscrowChannelOpen, currentSigned, price, desiredExpiration *big.Int, opts *BindOpts, chans *ChansToWatch, senders, recipients []common.Address, groupIDs [][32]byte) (*big.Int, error) {
+func (evm *EVMClient) EnsurePaymentChannel(mpe common.Address, filtered *MultiPartyEscrowChannelOpen, currentSigned, price, desiredExpiration *big.Int, opts *BindOpts, chans *ChansToWatch, senders, recipients []common.Address, groupIDs [][32]byte) (*big.Int, error) {
 	// Use a single base context for all operations below.
 	baseCtx := ctxFromBind(opts)
 
 	var err error
-	filtered, err = eth.FilterChannels(senders, recipients, groupIDs, opts.Filter)
+	filtered, err = evm.FilterChannels(senders, recipients, groupIDs, opts.Filter)
 	if err != nil {
 		return nil, err
 	}
 
-	if err = eth.ensureAllowance(baseCtx, senders[0], mpe, maxUint256, opts.Call, opts.Transact); err != nil {
+	if err = evm.ensureAllowance(baseCtx, senders[0], mpe, maxUint256, opts.Call, opts.Transact); err != nil {
 		return nil, err
 	}
 
 	if filtered == nil {
-		return eth.OpenNewChannel(price, desiredExpiration, opts, chans, senders, recipients, groupIDs)
+		return evm.OpenNewChannel(price, desiredExpiration, opts, chans, senders, recipients, groupIDs)
 	}
-	return eth.EnsureChannelValidity(filtered, currentSigned, price, desiredExpiration, opts, chans)
+	return evm.EnsureChannelValidity(filtered, currentSigned, price, desiredExpiration, opts, chans)
 }
 
 // OpenNewChannel opens a new MPE channel. If the MPE internal balance is insufficient,
 // it performs DepositAndOpenChannel and waits for both DepositFunds and ChannelOpen events.
-func (eth *EVMClient) OpenNewChannel(price, desiredExpiration *big.Int, opts *BindOpts, chans *ChansToWatch, senders, recipients []common.Address, groupIDs [][32]byte) (*big.Int, error) {
+func (evm *EVMClient) OpenNewChannel(price, desiredExpiration *big.Int, opts *BindOpts, chans *ChansToWatch, senders, recipients []common.Address, groupIDs [][32]byte) (*big.Int, error) {
 	ctx := ctxFromBind(opts)
 
-	mpeBal, err := eth.MPE.Balances(opts.Call, senders[0])
+	mpeBal, err := evm.MPE.Balances(opts.Call, senders[0])
 	if err != nil {
 		return nil, err
 	}
 
 	openDirect := func() (*big.Int, error) {
-		sub, err := eth.watchChannelOpen(ctx, opts.Watch, chans.ChannelOpens, chans.Err, senders, recipients, groupIDs)
+		sub, err := evm.watchChannelOpen(ctx, opts.Watch, chans.ChannelOpens, chans.Err, senders, recipients, groupIDs)
 		if err != nil {
 			return nil, err
 		}
 		defer sub.Unsubscribe()
 
-		if _, err = eth.MPE.OpenChannel(estimateGas(opts.Transact), senders[0], recipients[0], groupIDs[0], price, desiredExpiration); err != nil {
+		if _, err = evm.MPE.OpenChannel(estimateGas(opts.Transact), senders[0], recipients[0], groupIDs[0], price, desiredExpiration); err != nil {
 			return nil, err
 		}
 		return waitOpenID(ctx, chans.ChannelOpens, chans.Err, paymentChannelTimeout)
@@ -465,19 +454,19 @@ func (eth *EVMClient) OpenNewChannel(price, desiredExpiration *big.Int, opts *Bi
 	}
 
 	// Deposit + open: subscribe and wait for both events in parallel.
-	subOpen, err := eth.watchChannelOpen(ctx, opts.Watch, chans.ChannelOpens, chans.Err, senders, recipients, groupIDs)
+	subOpen, err := evm.watchChannelOpen(ctx, opts.Watch, chans.ChannelOpens, chans.Err, senders, recipients, groupIDs)
 	if err != nil {
 		return nil, err
 	}
 	defer subOpen.Unsubscribe()
 
-	subDep, err := eth.watchDepositFunds(ctx, opts.Watch, chans.DepositFunds, chans.Err, senders)
+	subDep, err := evm.watchDepositFunds(ctx, opts.Watch, chans.DepositFunds, chans.Err, senders)
 	if err != nil {
 		return nil, err
 	}
 	defer subDep.Unsubscribe()
 
-	if _, err = eth.MPE.DepositAndOpenChannel(estimateGas(opts.Transact), senders[0], recipients[0], groupIDs[0], price, desiredExpiration); err != nil {
+	if _, err = evm.MPE.DepositAndOpenChannel(estimateGas(opts.Transact), senders[0], recipients[0], groupIDs[0], price, desiredExpiration); err != nil {
 		return nil, err
 	}
 
@@ -520,7 +509,7 @@ func (eth *EVMClient) OpenNewChannel(price, desiredExpiration *big.Int, opts *Bi
 
 // EnsureChannelValidity ensures an opened channel has enough funds and a long-enough expiration.
 // It may deposit to MPE, AddFunds, Extend, or ExtendAndAddFunds and waits for the corresponding events.
-func (eth *EVMClient) EnsureChannelValidity(opened *MultiPartyEscrowChannelOpen, currentSigned, price, newExpiration *big.Int, opts *BindOpts, chans *ChansToWatch) (*big.Int, error) {
+func (evm *EVMClient) EnsureChannelValidity(opened *MultiPartyEscrowChannelOpen, currentSigned, price, newExpiration *big.Int, opts *BindOpts, chans *ChansToWatch) (*big.Int, error) {
 	ctx := ctxFromBind(opts)
 
 	avail := availableAmount(opened.Amount, currentSigned)
@@ -535,18 +524,18 @@ func (eth *EVMClient) EnsureChannelValidity(opened *MultiPartyEscrowChannelOpen,
 		missing := new(big.Int).Sub(price, avail)
 		topUp = missing
 
-		mpeBal, err := eth.MPE.Balances(opts.Call, opened.Sender)
+		mpeBal, err := evm.MPE.Balances(opts.Call, opened.Sender)
 		if err != nil {
 			return nil, err
 		}
 		if mpeBal.Cmp(missing) < 0 {
-			subDep, err := eth.watchDepositFunds(ctx, opts.Watch, chans.DepositFunds, chans.Err, []common.Address{opened.Sender})
+			subDep, err := evm.watchDepositFunds(ctx, opts.Watch, chans.DepositFunds, chans.Err, []common.Address{opened.Sender})
 			if err != nil {
 				return nil, err
 			}
 			defer subDep.Unsubscribe()
 
-			if _, err = eth.MPE.Deposit(estimateGas(opts.Transact), missing); err != nil {
+			if _, err = evm.MPE.Deposit(estimateGas(opts.Transact), missing); err != nil {
 				return nil, err
 			}
 			if err = waitDeposit(ctx, chans.DepositFunds, chans.Err, paymentChannelTimeout); err != nil {
@@ -560,19 +549,19 @@ func (eth *EVMClient) EnsureChannelValidity(opened *MultiPartyEscrowChannelOpen,
 
 	switch {
 	case needFunds && needExtend:
-		subAdd, err := eth.watchChannelAddFunds(ctx, opts.Watch, chans.ChannelAddFunds, chans.Err, channelIDs)
+		subAdd, err := evm.watchChannelAddFunds(ctx, opts.Watch, chans.ChannelAddFunds, chans.Err, channelIDs)
 		if err != nil {
 			return nil, err
 		}
 		defer subAdd.Unsubscribe()
 
-		subExt, err := eth.watchChannelExtend(ctx, opts.Watch, chans.ChannelExtends, chans.Err, channelIDs)
+		subExt, err := evm.watchChannelExtend(ctx, opts.Watch, chans.ChannelExtends, chans.Err, channelIDs)
 		if err != nil {
 			return nil, err
 		}
 		defer subExt.Unsubscribe()
 
-		if _, err = eth.MPE.ChannelExtendAndAddFunds(estimateGas(opts.Transact), id, newExpiration, topUp); err != nil {
+		if _, err = evm.MPE.ChannelExtendAndAddFunds(estimateGas(opts.Transact), id, newExpiration, topUp); err != nil {
 			return nil, err
 		}
 
@@ -599,13 +588,13 @@ func (eth *EVMClient) EnsureChannelValidity(opened *MultiPartyEscrowChannelOpen,
 		}
 
 	case needFunds:
-		subAdd, err := eth.watchChannelAddFunds(ctx, opts.Watch, chans.ChannelAddFunds, chans.Err, channelIDs)
+		subAdd, err := evm.watchChannelAddFunds(ctx, opts.Watch, chans.ChannelAddFunds, chans.Err, channelIDs)
 		if err != nil {
 			return nil, err
 		}
 		defer subAdd.Unsubscribe()
 
-		if _, err = eth.MPE.ChannelAddFunds(estimateGas(opts.Transact), id, topUp); err != nil {
+		if _, err = evm.MPE.ChannelAddFunds(estimateGas(opts.Transact), id, topUp); err != nil {
 			return nil, err
 		}
 		if _, err = waitAddFundsID(ctx, chans.ChannelAddFunds, chans.Err, paymentChannelTimeout); err != nil {
@@ -613,13 +602,13 @@ func (eth *EVMClient) EnsureChannelValidity(opened *MultiPartyEscrowChannelOpen,
 		}
 
 	default:
-		subExt, err := eth.watchChannelExtend(ctx, opts.Watch, chans.ChannelExtends, chans.Err, channelIDs)
+		subExt, err := evm.watchChannelExtend(ctx, opts.Watch, chans.ChannelExtends, chans.Err, channelIDs)
 		if err != nil {
 			return nil, err
 		}
 		defer subExt.Unsubscribe()
 
-		if _, err = eth.MPE.ChannelExtend(estimateGas(opts.Transact), id, newExpiration); err != nil {
+		if _, err = evm.MPE.ChannelExtend(estimateGas(opts.Transact), id, newExpiration); err != nil {
 			return nil, err
 		}
 		if _, err = waitExtendID(ctx, chans.ChannelExtends, chans.Err, paymentChannelTimeout); err != nil {

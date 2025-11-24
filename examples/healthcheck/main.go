@@ -10,7 +10,9 @@ import (
 
 func main() {
 	c := config.Config{
-		RPCAddr: "TODO",
+		RPCAddr:    "wss://sepolia.infura.io/ws/v3/",
+		PrivateKey: "",
+		Debug:      true,
 	}
 
 	snetSDK := sdk.NewSDK(&c)
@@ -21,10 +23,19 @@ func main() {
 		return
 	}
 
-	resp, err2 := service.Heartbeat()
+	resp, err1 := service.Healthcheck().HTTP()
+	if err1 != nil {
+		log.Println(err1)
+	}
+	fmt.Printf("\nHeartbeatHTTP: %v", resp)
+	respWebGrpc, err2 := service.Healthcheck().WebGRPC()
 	if err2 != nil {
 		log.Println(err2)
-		return
 	}
-	fmt.Printf("\nresp: %v", resp)
+	fmt.Printf("\nHeartbeatWebGRPC: %v", respWebGrpc)
+	respGrpc, err3 := service.Healthcheck().WebGRPC()
+	if err3 != nil {
+		log.Println(err3)
+	}
+	fmt.Printf("\nHeartbeatGRPC: %v", respGrpc)
 }

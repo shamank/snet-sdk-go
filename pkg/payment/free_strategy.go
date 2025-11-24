@@ -32,6 +32,7 @@ type FreeStrategy struct {
 	signerAddress    common.Address
 	stateClient      FreeCallStateServiceClient
 	tokenLifetime    *uint64
+	blockNumber      func(context.Context) (*big.Int, error)
 }
 
 // NewFreeStrategy constructs a FreeStrategy for the given org/service/group.
@@ -53,6 +54,9 @@ func NewFreeStrategy(evm *blockchain.EVMClient, grpc *grpc.Client, orgID, servic
 		signerAddress:    *blockchain.GetAddressFromPrivateKeyECDSA(privateKey),
 		stateClient:      NewFreeCallStateServiceClient(grpc.GRPC),
 		tokenLifetime:    tokenLifetime,
+		blockNumber: func(ctx context.Context) (*big.Int, error) {
+			return evm.GetCurrentBlockNumberCtx(ctx)
+		},
 	}, nil
 }
 
@@ -60,7 +64,10 @@ func NewFreeStrategy(evm *blockchain.EVMClient, grpc *grpc.Client, orgID, servic
 // It signs a message using the current block number for freshness and stores
 // the received token in f.Token.
 func (f *FreeStrategy) Refresh(ctx context.Context) error {
-	number, err := f.evmClient.GetCurrentBlockNumberCtx(ctx)
+	if f.blockNumber == nil {
+		return errors.New("block number provider not configured")
+	}
+	number, err := f.blockNumber(ctx)
 	if err != nil {
 		return err
 	}
@@ -84,7 +91,10 @@ func (f *FreeStrategy) Refresh(ctx context.Context) error {
 // context, including the token, user address, signature and current block.
 // Returns a derived context; if the current block cannot be read, it returns nil.
 func (f *FreeStrategy) GRPCMetadata(ctx context.Context) context.Context {
-	number, err := f.evmClient.GetCurrentBlockNumberCtx(ctx)
+	if f.blockNumber == nil {
+		return nil
+	}
+	number, err := f.blockNumber(ctx)
 	if err != nil {
 		return nil
 	}
@@ -106,7 +116,10 @@ func (f *FreeStrategy) GRPCMetadata(ctx context.Context) context.Context {
 // calls for the current user/token pair. It signs a freshness-bound message
 // using the current block.
 func (f *FreeStrategy) GetFreeCallsAvailable(ctx context.Context) (uint64, error) {
-	number, err := f.evmClient.GetCurrentBlockNumberCtx(ctx)
+	if f.blockNumber == nil {
+		return 0, errors.New("block number provider not configured")
+	}
+	number, err := f.blockNumber(ctx)
 	if err != nil {
 		return 0, nil
 	}

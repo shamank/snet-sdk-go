@@ -5,13 +5,18 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"errors"
+	"log"
 	"math/big"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/singnet/snet-sdk-go/pkg/blockchain"
 	"github.com/singnet/snet-sdk-go/pkg/grpc"
 	"github.com/singnet/snet-sdk-go/pkg/model"
+	grpcconn "google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 // PaidStrategy implements the "escrow" payment flow backed by the
@@ -25,6 +30,97 @@ type PaidStrategy struct {
 	nonce           *big.Int
 	signedAmount    *big.Int
 	privateKeyECDSA *ecdsa.PrivateKey
+}
+
+// ChainOperations captures blockchain interactions required by the paid
+// strategy. Different implementations can be injected for testing.
+type ChainOperations interface {
+	CurrentBlock(ctx context.Context) (*big.Int, error)
+	NetworkID(ctx context.Context) (*big.Int, error)
+	BuildBindOpts(from common.Address, currentBlockNumber, chainID *big.Int, key *ecdsa.PrivateKey, ctx context.Context) (*blockchain.BindOpts, error)
+	FilterChannels(senders, recipients []common.Address, groupIDs [][32]byte, opts *blockchain.BindOpts) (*blockchain.MultiPartyEscrowChannelOpen, error)
+	EnsurePaymentChannel(mpe common.Address, filtered *blockchain.MultiPartyEscrowChannelOpen, currentSigned, price, desiredExpiration *big.Int, opts *blockchain.BindOpts, chans *blockchain.ChansToWatch, senders, recipients []common.Address, groupIDs [][32]byte) (*big.Int, error)
+}
+
+// ChannelStateClient reads the current daemon channel state.
+type ChannelStateClient interface {
+	ChannelState(conn *grpcconn.ClientConn, ctx context.Context, mpe common.Address, channelID, currentBlock *big.Int, key *ecdsa.PrivateKey) (*ChannelStateReply, error)
+}
+
+// PaidStrategyDependencies groups optional overrides for blockchain/daemon access.
+type PaidStrategyDependencies struct {
+	Chain        ChainOperations
+	ChannelState ChannelStateClient
+}
+
+// PaidStrategyOption configures construction of a PaidStrategy.
+type PaidStrategyOption func(*paidStrategyConfig)
+
+type paidStrategyConfig struct {
+	chain        ChainOperations
+	channelState ChannelStateClient
+}
+
+// WithPaidStrategyDependencies overrides default dependencies used by NewPaidStrategy.
+func WithPaidStrategyDependencies(deps PaidStrategyDependencies) PaidStrategyOption {
+	return func(cfg *paidStrategyConfig) {
+		if deps.Chain != nil {
+			cfg.chain = deps.Chain
+		}
+		if deps.ChannelState != nil {
+			cfg.channelState = deps.ChannelState
+		}
+	}
+}
+
+func newPaidStrategyConfig(evm *blockchain.EVMClient, opts []PaidStrategyOption) paidStrategyConfig {
+	cfg := paidStrategyConfig{
+		chain:        defaultChainOperations{evm: evm},
+		channelState: defaultChannelStateClient{},
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg
+}
+
+type defaultChainOperations struct {
+	evm *blockchain.EVMClient
+}
+
+func (d defaultChainOperations) CurrentBlock(ctx context.Context) (*big.Int, error) {
+	return d.evm.GetCurrentBlockNumberCtx(ctx)
+}
+
+func (d defaultChainOperations) NetworkID(ctx context.Context) (*big.Int, error) {
+	return d.evm.Client.NetworkID(ctx)
+}
+
+func (d defaultChainOperations) BuildBindOpts(from common.Address, currentBlockNumber, chainID *big.Int, key *ecdsa.PrivateKey, ctx context.Context) (*blockchain.BindOpts, error) {
+	transactOpts, err := blockchain.GetTransactOpts(chainID, key)
+	if err != nil {
+		return nil, err
+	}
+	return &blockchain.BindOpts{
+		Call:     blockchain.GetCallOpts(from, currentBlockNumber, ctx),
+		Transact: transactOpts,
+		Watch:    blockchain.GetWatchOpts(currentBlockNumber, ctx),
+		Filter:   blockchain.GetFilterOpts(currentBlockNumber, ctx),
+	}, nil
+}
+
+func (d defaultChainOperations) FilterChannels(senders, recipients []common.Address, groupIDs [][32]byte, opts *blockchain.BindOpts) (*blockchain.MultiPartyEscrowChannelOpen, error) {
+	return d.evm.FilterChannels(senders, recipients, groupIDs, opts.Filter)
+}
+
+func (d defaultChainOperations) EnsurePaymentChannel(mpe common.Address, filtered *blockchain.MultiPartyEscrowChannelOpen, currentSigned, price, desiredExpiration *big.Int, opts *blockchain.BindOpts, chans *blockchain.ChansToWatch, senders, recipients []common.Address, groupIDs [][32]byte) (*big.Int, error) {
+	return d.evm.EnsurePaymentChannel(mpe, filtered, currentSigned, price, desiredExpiration, opts, chans, senders, recipients, groupIDs)
+}
+
+type defaultChannelStateClient struct{}
+
+func (defaultChannelStateClient) ChannelState(conn *grpcconn.ClientConn, ctx context.Context, mpe common.Address, channelID, currentBlock *big.Int, key *ecdsa.PrivateKey) (*ChannelStateReply, error) {
+	return GetChannelStateFromDaemon(conn, ctx, mpe, channelID, currentBlock, key)
 }
 
 // NewPaidStrategy builds a PaidStrategy, ensuring there is a usable payment
@@ -58,11 +154,14 @@ func NewPaidStrategy(
 	privateKeyECDSA *ecdsa.PrivateKey,
 	serviceGroup *model.ServiceGroup,
 	orgGroup *model.OrganizationGroup,
+	opts ...PaidStrategyOption,
 ) (Strategy, error) {
 
 	if ctx == nil {
 		ctx = context.TODO()
 	}
+
+	cfg := newPaidStrategyConfig(evm, opts)
 
 	mpeAddress := common.HexToAddress(serviceMetadata.MPEAddress)
 	priceInCogs := serviceGroup.Pricing[0].PriceInCogs
@@ -75,25 +174,19 @@ func NewPaidStrategy(
 	recipient := common.HexToAddress(orgGroup.PaymentDetails.PaymentAddress)
 	fromAddress := blockchain.GetAddressFromPrivateKeyECDSA(privateKeyECDSA)
 
-	currentBlockNumber, err := evm.GetCurrentBlockNumberCtx(ctx)
+	currentBlockNumber, err := cfg.chain.CurrentBlock(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	chainID, err := evm.Client.NetworkID(ctx)
+	chainID, err := cfg.chain.NetworkID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	transactOpts, err := blockchain.GetTransactOpts(chainID, privateKeyECDSA)
+	bindOpts, err := cfg.chain.BuildBindOpts(*fromAddress, currentBlockNumber, chainID, privateKeyECDSA, ctx)
 	if err != nil {
 		return nil, err
-	}
-	opts := &blockchain.BindOpts{
-		Call:     blockchain.GetCallOpts(*fromAddress, currentBlockNumber, ctx),
-		Transact: transactOpts,
-		Watch:    blockchain.GetWatchOpts(currentBlockNumber, ctx),
-		Filter:   blockchain.GetFilterOpts(currentBlockNumber, ctx),
 	}
 
 	chans := &blockchain.ChansToWatch{
@@ -108,7 +201,7 @@ func NewPaidStrategy(
 	recipients := []common.Address{recipient}
 	groupIDs := [][32]byte{groupID}
 
-	filteredChannel, err := evm.FilterChannels(senders, recipients, groupIDs, opts.Filter)
+	filteredChannel, err := cfg.chain.FilterChannels(senders, recipients, groupIDs, bindOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -119,25 +212,40 @@ func NewPaidStrategy(
 	currentNonce := big.NewInt(0)
 
 	if filteredChannel != nil {
-		state, err := GetChannelStateFromDaemon(grpcCli.GRPC, ctx, mpeAddress, filteredChannel.ChannelId, currentBlockNumber, privateKeyECDSA)
+		state, err := cfg.channelState.ChannelState(grpcCli.GRPC, ctx, mpeAddress, filteredChannel.ChannelId, currentBlockNumber, privateKeyECDSA)
 		if err != nil {
-			return nil, err
+			st, ok := status.FromError(err)
+			switch {
+			case ok && (st.Code() == codes.NotFound || st.Code() == codes.Unknown) && strings.Contains(st.Message(), "channel is not found"):
+				log.Printf("paid strategy: channel %s not found in daemon, will create a new one", filteredChannel.ChannelId.String())
+				filteredChannel = nil
+			case strings.Contains(err.Error(), "channel is not found"):
+				log.Printf("paid strategy: channel %s not found in daemon, will create a new one", filteredChannel.ChannelId.String())
+				filteredChannel = nil
+			default:
+				log.Println("daemon err")
+				return nil, err
+			}
 		}
-		if b := state.GetCurrentSignedAmount(); len(b) > 0 {
-			currentSignedAmount = new(big.Int).SetBytes(b)
-		}
-		if b := state.GetCurrentNonce(); len(b) > 0 {
-			currentNonce = new(big.Int).SetBytes(b)
-			if currentNonce == nil {
-				return nil, errors.New("error while getting current nonce")
+		if filteredChannel != nil && state != nil {
+			if b := state.GetCurrentSignedAmount(); len(b) > 0 {
+				currentSignedAmount = new(big.Int).SetBytes(b)
+			}
+			if b := state.GetCurrentNonce(); len(b) > 0 {
+				currentNonce = new(big.Int).SetBytes(b)
+				if currentNonce == nil {
+					return nil, errors.New("error while getting current nonce")
+				}
 			}
 		}
 	}
 
-	channelID, err := evm.EnsurePaymentChannel(mpeAddress, filteredChannel, currentSignedAmount, priceInCogs, newExpiration, opts, chans, senders, recipients, groupIDs)
+	channelID, err := cfg.chain.EnsurePaymentChannel(mpeAddress, filteredChannel, currentSignedAmount, priceInCogs, newExpiration, bindOpts, chans, senders, recipients, groupIDs)
 	if err != nil {
 		return nil, err
 	}
+
+	log.Println("channel id EnsurePaymentChannel", channelID)
 
 	signedAmount := new(big.Int).Add(currentSignedAmount, priceInCogs)
 

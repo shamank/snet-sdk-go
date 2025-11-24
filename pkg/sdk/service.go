@@ -1,27 +1,45 @@
 package sdk
 
 import (
-	"archive/zip"
 	"context"
 	"crypto/ecdsa"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
-	"path/filepath"
+	"math/big"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/singnet/snet-sdk-go/pkg/blockchain"
 	"github.com/singnet/snet-sdk-go/pkg/config"
 	"github.com/singnet/snet-sdk-go/pkg/grpc"
 	"github.com/singnet/snet-sdk-go/pkg/model"
 	"github.com/singnet/snet-sdk-go/pkg/payment"
 	"github.com/singnet/snet-sdk-go/pkg/training"
-	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
+
+// paymentStrategyFactory constructs payment strategies for the service client.
+// Test doubles can implement this interface to intercept strategy creation.
+type paymentStrategyFactory interface {
+	Paid(ctx context.Context, evm *blockchain.EVMClient, grpcCli *grpc.Client, metadata *model.ServiceMetadata, key *ecdsa.PrivateKey, serviceGroup *model.ServiceGroup, orgGroup *model.OrganizationGroup) (payment.Strategy, error)
+	PrePaid(ctx context.Context, evm *blockchain.EVMClient, grpcCli *grpc.Client, mpeAddr common.Address, serviceGroup *model.ServiceGroup, orgGroup *model.OrganizationGroup, privateKey string, count uint64) (payment.Strategy, error)
+	Free(evm *blockchain.EVMClient, grpcCli *grpc.Client, orgID, serviceID, groupID string, key *ecdsa.PrivateKey, extend *uint64) (payment.Strategy, error)
+}
+
+// defaultStrategyFactory provides the production constructors for payment strategies.
+type defaultStrategyFactory struct{}
+
+func (defaultStrategyFactory) Paid(ctx context.Context, evm *blockchain.EVMClient, grpcCli *grpc.Client, metadata *model.ServiceMetadata, key *ecdsa.PrivateKey, serviceGroup *model.ServiceGroup, orgGroup *model.OrganizationGroup) (payment.Strategy, error) {
+	return payment.NewPaidStrategy(ctx, evm, grpcCli, metadata, key, serviceGroup, orgGroup)
+}
+
+func (defaultStrategyFactory) PrePaid(ctx context.Context, evm *blockchain.EVMClient, grpcCli *grpc.Client, mpeAddr common.Address, serviceGroup *model.ServiceGroup, orgGroup *model.OrganizationGroup, privateKey string, count uint64) (payment.Strategy, error) {
+	return payment.NewPrePaidStrategy(ctx, evm, grpcCli, mpeAddr, serviceGroup, orgGroup, privateKey, count)
+}
+
+func (defaultStrategyFactory) Free(evm *blockchain.EVMClient, grpcCli *grpc.Client, orgID, serviceID, groupID string, key *ecdsa.PrivateKey, extend *uint64) (payment.Strategy, error) {
+	return payment.NewFreeStrategy(evm, grpcCli, orgID, serviceID, groupID, key, extend)
+}
 
 // Service defines the high-level client API for invoking service methods and
 // managing payment strategies. Implementations wrap a dynamic gRPC client and
@@ -46,27 +64,51 @@ type Service interface {
 	// allowance based on call count and obtains tokens on Refresh. Requires a
 	// valid signer private key in the SDK config.
 	SetPrePaidPaymentStrategy(count uint64) error
+
 	// SetFreePaymentStrategy configures the free-call strategy and obtains a
 	// short-lived free-call token on Refresh. Optional extendBlocks controls
 	// token lifetime in blocks (daemon-dependent).
 	SetFreePaymentStrategy(extendBlocks ...uint64) error
+
 	// GetFreeCallsAvailable returns the remaining number of free calls for the
 	// current user/token.
 	GetFreeCallsAvailable() (uint64, error)
-	// SaveProtoFiles writes parsed .proto sources to the given directory,
-	// preserving relative paths contained in filenames.
-	SaveProtoFiles(path string) error
-	// SaveProtoFilesZip writes parsed .proto sources to a ZIP archive at the
-	// given path, preserving relative paths contained in filenames.
-	SaveProtoFilesZip(path string) error
-	// ProtoFiles returns the in-memory .proto sources as a map of
-	// filename -> file contents.
-	ProtoFiles() (files map[string]string)
-	// TrainingClient returns a training sub-client bound to this service.
-	TrainingClient() training.Client
-	// Heartbeat performs a simple health check against the service daemon
-	// (HTTP GET "<endpoint>/heartbeat") and returns the decoded JSON payload.
-	Heartbeat() (any, error)
+
+	// ProtoFiles returns a proto file manager for this service
+	ProtoFiles() grpc.ProtoManager
+
+	// Training returns a training sub-client bound to this service.
+	Training() training.Client
+
+	// Organization returns the organization this service belongs to
+	Organization() Organization
+
+	// Healthcheck performs a simple health check against the service daemon
+	Healthcheck() Healthcheck
+
+	// GetCurrentOrgGroup returns the current organization group
+	GetCurrentOrgGroup() *model.OrganizationGroup
+
+	// GetCurrentServiceGroup returns the current service group
+	GetCurrentServiceGroup() *model.ServiceGroup
+
+	// GetServiceID returns the service identifier
+	GetServiceID() string
+
+	// GetServiceMetadata returns the full service metadata
+	GetServiceMetadata() *model.ServiceMetadata
+
+	// UpdateServiceMetadata updates the service metadata (uploads to IPFS and updates blockchain)
+	UpdateServiceMetadata(metadata *model.ServiceMetadata) (common.Hash, error)
+
+	// DeleteService deletes the service registration from blockchain
+	DeleteService() (common.Hash, error)
+
+	// RawGrpc returns direct access to the gRPC client (advanced usage)
+	RawGrpc() *grpc.Client
+
+	getBlockchainClient() *blockchain.ServiceClient
+
 	// Close releases resources (e.g., underlying gRPC connection).
 	Close()
 }
@@ -79,6 +121,10 @@ type ServiceClient struct {
 	GRPC                *grpc.Client
 	strategy            payment.Strategy
 	config              *config.Config
+	org                 Organization
+	orgClient           *blockchain.OrgClient
+	srvClient           *blockchain.ServiceClient
+	grpcClient          *grpc.Client
 	ServiceID           string
 	OrgID               string
 	CurrentServiceGroup *model.ServiceGroup
@@ -87,20 +133,377 @@ type ServiceClient struct {
 	CurrentOrgGroup     *model.OrganizationGroup
 	SignerPrivateKey    *ecdsa.PrivateKey
 	trainingClient      training.Client
+	strategies          paymentStrategyFactory
 }
 
-// TrainingClient returns (and lazily initializes) a training client bound to
-// this service, using the same signer and block-number provider.
-func (sC *ServiceClient) TrainingClient() training.Client {
-	if sC.trainingClient == nil {
-		sC.trainingClient = training.NewTrainingClient(sC.GRPC, sC.SignerPrivateKey, sC.EVMClient.GetCurrentBlockNumber)
+// newServiceClient wires together the runtime-facing ServiceClient wrapper using
+// blockchain metadata, gRPC client and signer configuration. It keeps backward
+// compatible field population for legacy call sites that rely on struct fields.
+func newServiceClient(
+	cfg *config.Config,
+	org Organization,
+	orgBC *blockchain.OrgClient,
+	svcBC *blockchain.ServiceClient,
+	grpcClient *grpc.Client,
+	signer *ecdsa.PrivateKey,
+) *ServiceClient {
+	sc := &ServiceClient{
+		EVMClient:           nil,
+		GRPC:                grpcClient,
+		strategy:            nil,
+		config:              cfg,
+		org:                 org,
+		orgClient:           orgBC,
+		srvClient:           svcBC,
+		grpcClient:          grpcClient,
+		ServiceID:           "",
+		OrgID:               "",
+		CurrentServiceGroup: nil,
+		OrgMetadata:         nil,
+		ServiceMetadata:     nil,
+		CurrentOrgGroup:     nil,
+		SignerPrivateKey:    signer,
+		trainingClient:      nil,
 	}
-	return sC.trainingClient
+
+	if svcBC != nil {
+		sc.EVMClient = svcBC.EVMClient
+		sc.ServiceID = svcBC.ServiceID
+		sc.ServiceMetadata = svcBC.ServiceMetadata
+		sc.CurrentServiceGroup = svcBC.CurrentGroup
+	}
+
+	if orgBC != nil {
+		sc.orgClient = orgBC
+		sc.CurrentOrgGroup = orgBC.CurrentOrgGroup
+		sc.OrgMetadata = orgBC.OrganizationMetaData
+		if orgBC.OrganizationMetaData != nil {
+			sc.OrgID = orgBC.OrganizationMetaData.OrgID
+		}
+	}
+
+	return sc
+}
+
+// strategyFactory returns the strategy factory to use, defaulting to production constructors.
+func (s *ServiceClient) strategyFactory() paymentStrategyFactory {
+	if s.strategies == nil {
+		s.strategies = defaultStrategyFactory{}
+	}
+	return s.strategies
+}
+
+func (s *ServiceClient) RawGrpc() *grpc.Client {
+	return s.GRPC
+}
+
+// RawGrpc returns direct access to the gRPC client (advanced usage)
+//func (s *ServiceClient) RawGrpc() *grpc.Client {
+//	return s.grpcClient
+//}
+
+func (s *ServiceClient) getBlockchainClient() *blockchain.ServiceClient {
+	return s.srvClient
+}
+
+// NewServiceClient builds a Service client from organization and blockchain service.
+// It creates a gRPC connection to the service endpoint and prepares for RPC calls.
+func (c *Core) NewServiceClient(orgID, serviceID, groupName string) (*ServiceClient, error) {
+
+	orgClient, err := c.NewOrganizationClient(orgID, groupName)
+	if err != nil {
+		return nil, err
+	}
+
+	serviceClient, err := orgClient.ServiceClient(serviceID, groupName)
+	if err != nil {
+		return nil, err
+	}
+
+	if serviceClient == nil {
+		return nil, fmt.Errorf("blockchain service client is required")
+	}
+
+	if len(serviceClient.GetCurrentServiceGroup().Endpoints) == 0 {
+		return nil, fmt.Errorf("no endpoints available for service group %s",
+			serviceClient.GetCurrentServiceGroup().GroupName)
+	}
+
+	// Create gRPC client to the first endpoint
+	// TODO: endpoint selection strategy (currently takes the first endpoint)
+	endpoint := serviceClient.GetCurrentServiceGroup().Endpoints[0]
+	grpcClient := grpc.NewClient(endpoint, serviceClient.ProtoFiles().Get())
+
+	return newServiceClient(
+		c.Config,
+		orgClient,
+		orgClient.getBlockchainClient(),
+		serviceClient.getBlockchainClient(),
+		grpcClient,
+		c.prvKey,
+	), nil
+}
+
+// Organization returns the organization this service belongs to
+func (s *ServiceClient) Organization() Organization {
+	return s.org
+}
+
+// GetServiceID returns the service identifier
+func (s *ServiceClient) GetServiceID() string {
+	return s.srvClient.ServiceID
+}
+
+// GetServiceMetadata returns the full service metadata
+func (s *ServiceClient) GetServiceMetadata() *model.ServiceMetadata {
+	return s.srvClient.ServiceMetadata
+}
+
+// GetCurrentOrgGroup returns the current organization group
+func (s *ServiceClient) GetCurrentOrgGroup() *model.OrganizationGroup {
+	return s.orgClient.CurrentOrgGroup
+}
+
+// GetCurrentServiceGroup returns the current service group
+func (s *ServiceClient) GetCurrentServiceGroup() *model.ServiceGroup {
+	return s.srvClient.CurrentGroup
+}
+
+// ProtoFiles returns a proto file manager for this service
+func (s *ServiceClient) ProtoFiles() grpc.ProtoManager {
+	meta := s.ServiceMetadata
+	if s.srvClient != nil && s.srvClient.ServiceMetadata != nil {
+		meta = s.srvClient.ServiceMetadata
+	}
+	if meta == nil {
+		meta = &model.ServiceMetadata{}
+	}
+	return grpc.NewProtoManager(meta)
+}
+
+// Healthcheck returns a healthcheck client for this service
+func (s *ServiceClient) Healthcheck() Healthcheck {
+	group := s.CurrentServiceGroup
+	if s.srvClient != nil && s.srvClient.CurrentGroup != nil {
+		group = s.srvClient.CurrentGroup
+	}
+	return newHealthcheckClient(
+		s.grpcClient,
+		group,
+		s.config,
+	)
+}
+
+// Training returns (and lazily initializes) a training client bound to
+// this service, using the same signer and block-number provider.
+func (s *ServiceClient) Training() training.Client {
+	if s.trainingClient == nil {
+		blockNumber := func() (*big.Int, error) {
+			return nil, errors.New("block number provider not configured")
+		}
+		if s.srvClient != nil && s.srvClient.EVMClient != nil {
+			blockNumber = s.srvClient.EVMClient.GetCurrentBlockNumber
+		} else if s.EVMClient != nil {
+			blockNumber = s.EVMClient.GetCurrentBlockNumber
+		}
+
+		var priv *ecdsa.PrivateKey
+		if s.config != nil {
+			priv = s.config.GetPrivateKey()
+		}
+
+		s.trainingClient = training.NewTrainingClient(
+			s.grpcClient,
+			priv,
+			blockNumber,
+		)
+	}
+	return s.trainingClient
+}
+
+// SetPaidPaymentStrategy initializes the escrow (MPE) payment strategy and
+// ensures a valid channel (funds/expiration). It does not perform a Refresh
+// because escrow calls sign per-request.
+func (s *ServiceClient) SetPaidPaymentStrategy() error {
+	ctx, cancel := s.withTimeout(context.Background(), s.ensureTimeout())
+	defer cancel()
+
+	strategy, err := s.strategyFactory().Paid(
+		ctx,
+		s.EVMClient,
+		s.GRPC,
+		s.ServiceMetadata,
+		s.config.GetPrivateKey(),
+		s.CurrentServiceGroup,
+		s.CurrentOrgGroup,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create paid strategy: %w", err)
+	}
+
+	s.strategy = strategy
+	return nil
+}
+
+// SetPrePaidPaymentStrategy initializes the prepaid strategy and immediately
+// refreshes the daemon-issued token. The count parameter indicates the number
+// of calls to provision in the initial signed allowance.
+func (s *ServiceClient) SetPrePaidPaymentStrategy(count uint64) error {
+	ctx, cancel := s.withTimeout(context.Background(), s.ensureTimeout())
+	defer cancel()
+
+	strategy, err := s.strategyFactory().PrePaid(ctx, s.EVMClient, s.GRPC, s.ServiceMetadata.GetMpeAddr(), s.CurrentServiceGroup, s.CurrentOrgGroup, s.config.PrivateKey, count)
+	if err != nil {
+		return fmt.Errorf("failed to create prepaid strategy: %w", err)
+	}
+
+	s.strategy = strategy
+
+	if err := s.strategy.Refresh(ctx); err != nil {
+		return fmt.Errorf("failed to refresh prepaid strategy: %w", err)
+	}
+
+	return nil
+}
+
+// SetFreePaymentStrategy initializes the free-call strategy and fetches a
+// short-lived token. If extendBlocks is provided, it is forwarded to request a
+// custom token lifetime (daemon may ignore or cap it).
+func (s *ServiceClient) SetFreePaymentStrategy(extendBlocks ...uint64) error {
+	strategy, err := s.strategyFactory().Free(s.EVMClient, s.GRPC, s.OrgID, s.ServiceID, s.CurrentOrgGroup.ID, s.SignerPrivateKey, optionalUint64(extendBlocks...))
+	if err != nil {
+		return err
+	}
+	s.strategy = strategy
+	ctx, cancel := s.withTimeout(context.Background(), s.config.Timeouts.StrategyRefresh)
+	defer cancel()
+	return strategy.Refresh(ctx)
+}
+
+// GetFreeCallsAvailable returns the number of remaining free calls for the
+// current user/token. It requires the active strategy to be FreeStrategy.
+func (s *ServiceClient) GetFreeCallsAvailable() (uint64, error) {
+	freeStrat, ok := s.strategy.(*payment.FreeStrategy)
+	if !ok {
+		return 0, errors.New("current strategy is not FreeStrategy")
+	}
+
+	ctx, cancel := s.withTimeout(context.Background(), s.config.Timeouts.StrategyRefresh)
+	defer cancel()
+
+	available, err := freeStrat.GetFreeCallsAvailable(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get free calls available: %w", err)
+	}
+
+	return available, nil
+}
+
+// CallWithMap invokes a method with a map-based request. Payment metadata is
+// injected by the current strategy into the outgoing context.
+func (s *ServiceClient) CallWithMap(method string, params map[string]any) (map[string]any, error) {
+	if s.strategy == nil {
+		return nil, errors.New("payment strategy not set; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy first")
+	}
+
+	ctx, cancel := s.withTimeout(context.Background(), s.config.Timeouts.GRPCUnary)
+	defer cancel()
+
+	resp, err := s.grpcClient.CallWithMap(s.strategy.GRPCMetadata(ctx), method, params)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC call failed: %w", err)
+	}
+
+	return resp, nil
+}
+
+// CallWithJSON invokes a method with raw JSON request bytes. The JSON is mapped
+// to the protobuf input type using service descriptors.
+func (s *ServiceClient) CallWithJSON(method string, input []byte) ([]byte, error) {
+	if s.strategy == nil {
+		return nil, errors.New("payment strategy not set; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy first")
+	}
+
+	ctx, cancel := s.withTimeout(context.Background(), s.config.Timeouts.GRPCUnary)
+	defer cancel()
+
+	resp, err := s.grpcClient.CallWithJSON(s.strategy.GRPCMetadata(ctx), method, input)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC call failed: %w", err)
+	}
+
+	return resp, nil
+}
+
+// CallWithProto invokes a method with a concrete protobuf request message and
+// returns the protobuf response message.
+func (s *ServiceClient) CallWithProto(method string, input proto.Message) (proto.Message, error) {
+	if s.strategy == nil {
+		return nil, errors.New("payment strategy not set; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy first")
+	}
+
+	ctx, cancel := s.withTimeout(context.Background(), s.config.Timeouts.GRPCUnary)
+	defer cancel()
+
+	resp, err := s.grpcClient.CallWithProto(s.strategy.GRPCMetadata(ctx), method, input)
+	if err != nil {
+		return nil, fmt.Errorf("gRPC call failed: %w", err)
+	}
+
+	return resp, nil
+}
+
+// UpdateServiceMetadata updates the service metadata (uploads to IPFS and updates blockchain)
+func (s *ServiceClient) UpdateServiceMetadata(metadata *model.ServiceMetadata) (common.Hash, error) {
+	pk := s.config.GetPrivateKey()
+	if pk == nil {
+		return common.Hash{}, fmt.Errorf("private key not configured")
+	}
+
+	bcClient := s.getBlockchainClient()
+
+	// Upload metadata to IPFS
+	uri, err := bcClient.Storage.UploadJSON(metadata)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to upload metadata to IPFS: %w", err)
+	}
+
+	// Update service metadata in blockchain
+	hash, err := bcClient.UpdateServiceMetadata(pk, []byte(uri))
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to update service metadata: %w", err)
+	}
+
+	return hash, nil
+}
+
+// DeleteService deletes the service registration from blockchain
+func (s *ServiceClient) DeleteService() (common.Hash, error) {
+	pk := s.config.GetPrivateKey()
+	if pk == nil {
+		return common.Hash{}, fmt.Errorf("private key not configured")
+	}
+
+	bcClient := s.getBlockchainClient()
+
+	hash, err := bcClient.DeleteServiceWithAuth(pk)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to delete service: %w", err)
+	}
+
+	return hash, nil
+}
+
+// Close releases the underlying gRPC connection. It is safe to call multiple times.
+func (s *ServiceClient) Close() {
+	if s.grpcClient != nil {
+		_ = s.grpcClient.Close()
+	}
 }
 
 // withTimeout returns a derived context with the given timeout. A cancelable
 // context is returned when d <= 0.
-func (sC *ServiceClient) withTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+func (s *ServiceClient) withTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
 	if d <= 0 {
 		return context.WithCancel(ctx)
 	}
@@ -109,241 +512,14 @@ func (sC *ServiceClient) withTimeout(ctx context.Context, d time.Duration) (cont
 
 // ensureTimeout selects a sensible timeout for strategy operations, preferring
 // PaymentEnsure, then StrategyRefresh, and finally a 1-minute default.
-func (sC *ServiceClient) ensureTimeout() time.Duration {
-	if sC.config != nil {
-		if sC.config.Timeouts.PaymentEnsure > 0 {
-			return sC.config.Timeouts.PaymentEnsure
-		}
-		if sC.config.Timeouts.StrategyRefresh > 0 {
-			return sC.config.Timeouts.StrategyRefresh
-		}
+func (s *ServiceClient) ensureTimeout() time.Duration {
+	if s.config != nil && s.config.Timeouts.PaymentEnsure > 0 {
+		return s.config.Timeouts.PaymentEnsure
+	}
+	if s.config != nil && s.config.Timeouts.StrategyRefresh > 0 {
+		return s.config.Timeouts.StrategyRefresh
 	}
 	return time.Minute
-}
-
-// SetPaidPaymentStrategy initializes the escrow (MPE) payment strategy and
-// ensures a valid channel (funds/expiration). It does not perform a Refresh
-// because escrow calls sign per-request.
-func (sC *ServiceClient) SetPaidPaymentStrategy() error {
-	ctx, cancel := sC.withTimeout(context.Background(), sC.ensureTimeout())
-	defer cancel()
-
-	strategy, err := payment.NewPaidStrategy(
-		ctx,
-		sC.EVMClient,
-		sC.GRPC,
-		sC.ServiceMetadata,
-		sC.SignerPrivateKey,
-		sC.CurrentServiceGroup,
-		sC.CurrentOrgGroup,
-	)
-	if err != nil {
-		return err
-	}
-	sC.strategy = strategy
-	return nil
-}
-
-// SetPrePaidPaymentStrategy initializes the prepaid strategy and immediately
-// refreshes the daemon-issued token. The count parameter indicates the number
-// of calls to provision in the initial signed allowance.
-func (sC *ServiceClient) SetPrePaidPaymentStrategy(count uint64) error {
-	ctx, cancel := sC.withTimeout(context.Background(), sC.ensureTimeout())
-	defer cancel()
-
-	strategy, err := payment.NewPrePaidStrategy(ctx, sC.EVMClient, sC.GRPC, sC.ServiceMetadata.GetMpeAddr(), sC.CurrentServiceGroup, sC.CurrentOrgGroup, sC.config.PrivateKey, count)
-	if err != nil {
-		return err
-	}
-	sC.strategy = strategy
-
-	return strategy.Refresh(ctx)
-}
-
-// SetFreePaymentStrategy initializes the free-call strategy and fetches a
-// short-lived token. If extendBlocks is provided, it is forwarded to request a
-// custom token lifetime (daemon may ignore or cap it).
-func (sC *ServiceClient) SetFreePaymentStrategy(extendBlocks ...uint64) error {
-	strategy, err := payment.NewFreeStrategy(sC.EVMClient, sC.GRPC, sC.OrgID, sC.ServiceID, sC.CurrentOrgGroup.ID, sC.SignerPrivateKey, optionalUint64(extendBlocks...))
-	if err != nil {
-		return err
-	}
-	sC.strategy = strategy
-	ctx, cancel := sC.withTimeout(context.Background(), sC.config.Timeouts.StrategyRefresh)
-	defer cancel()
-	return strategy.Refresh(ctx)
-}
-
-// GetFreeCallsAvailable returns the number of remaining free calls for the
-// current user/token. It requires the active strategy to be FreeStrategy.
-func (sC *ServiceClient) GetFreeCallsAvailable() (uint64, error) {
-	ctx, cancel := sC.withTimeout(context.Background(), sC.config.Timeouts.StrategyRefresh)
-	defer cancel()
-
-	freeStrat, ok := sC.strategy.(*payment.FreeStrategy)
-	if !ok {
-		return 0, errors.New("invalid strategy")
-	}
-	available, err := freeStrat.GetFreeCallsAvailable(ctx)
-	if err != nil {
-		return available, err
-	}
-	return available, nil
-}
-
-// CallWithMap invokes a method with a map-based request. Payment metadata is
-// injected by the current strategy into the outgoing context.
-func (sC *ServiceClient) CallWithMap(method string, params map[string]any) (resp map[string]any, err error) {
-	ctx, cancel := sC.withTimeout(context.Background(), sC.config.Timeouts.GRPCUnary)
-	defer cancel()
-	resp, err = sC.GRPC.CallWithMap(sC.strategy.GRPCMetadata(ctx), method, params)
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// CallWithJSON invokes a method with raw JSON request bytes. The JSON is mapped
-// to the protobuf input type using service descriptors.
-func (sC *ServiceClient) CallWithJSON(method string, input []byte) (resp []byte, err error) {
-	ctx, cancel := sC.withTimeout(context.Background(), sC.config.Timeouts.GRPCUnary)
-	defer cancel()
-	resp, err = sC.GRPC.CallWithJSON(sC.strategy.GRPCMetadata(ctx), method, input)
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// CallWithProto invokes a method with a concrete protobuf request message and
-// returns the protobuf response message.
-func (sC *ServiceClient) CallWithProto(method string, input proto.Message) (resp proto.Message, err error) {
-	ctx, cancel := sC.withTimeout(context.Background(), sC.config.Timeouts.GRPCUnary)
-	defer cancel()
-	resp, err = sC.GRPC.CallWithProto(sC.strategy.GRPCMetadata(ctx), method, input)
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// SaveProtoFilesZip writes all loaded .proto files from the ServiceClient
-// into a ZIP archive at the specified path.
-//
-// Each proto file is added to the archive preserving its filename (including any subdirectories).
-//
-// Returns an error if the ZIP file cannot be created, or if any file cannot be added or written.
-func (sC *ServiceClient) SaveProtoFilesZip(zipPath string) error {
-	protos := sC.ServiceMetadata.ProtoFiles
-	if len(protos) == 0 {
-		return fmt.Errorf("no proto files to save")
-	}
-
-	outFile, err := os.Create(zipPath)
-	if err != nil {
-		return fmt.Errorf("failed to create zip file: %w", err)
-	}
-	defer func(outFile *os.File) {
-		err = outFile.Close()
-		if err != nil {
-			zap.L().Error("failed to close zip file", zap.Error(err))
-			return
-		}
-	}(outFile)
-
-	zipWriter := zip.NewWriter(outFile)
-	defer func(zipWriter *zip.Writer) {
-		err = zipWriter.Close()
-		if err != nil {
-			zap.L().Error("failed to close zip writer", zap.Error(err))
-		}
-	}(zipWriter)
-
-	for filename, content := range protos {
-		// Create a file entry in the ZIP archive
-		fw, err := zipWriter.Create(filename)
-		if err != nil {
-			return fmt.Errorf("failed to create file %s in zip: %w", filename, err)
-		}
-
-		if _, err = fw.Write([]byte(content)); err != nil {
-			return fmt.Errorf("failed to write content for %s: %w", filename, err)
-		}
-	}
-
-	zap.L().Info("zip file created", zap.Int("files", len(protos)), zap.String("zip_path", zipPath))
-
-	return nil
-}
-
-// SaveProtoFiles writes all loaded .proto files from the ServiceClient
-// to the specified directory on disk. It preserves subdirectory structure
-// based on the filenames.
-//
-// If the directory does not exist, it will be created along with any
-// necessary subdirectories.
-//
-// Returns an error if any file cannot be written or if directory creation fails.
-func (sC *ServiceClient) SaveProtoFiles(dirPath string) error {
-	protos := sC.ServiceMetadata.ProtoFiles
-	if len(protos) == 0 {
-		return fmt.Errorf("no proto files to save")
-	}
-
-	// Ensure the target directory exists
-	if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	for filename, content := range protos {
-		fullPath := filepath.Join(dirPath, filename)
-
-		// Create subdirectories if the filename includes folders
-		if err := os.MkdirAll(filepath.Dir(fullPath), os.ModePerm); err != nil {
-			return fmt.Errorf("failed to create subdirectory for %s: %w", filename, err)
-		}
-
-		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
-			return fmt.Errorf("failed to write file %s: %w", fullPath, err)
-		}
-	}
-
-	return nil
-}
-
-// ProtoFiles returns parsed .proto sources as a map where the key is the
-// filename (possibly with subdirectories) and the value is the file content.
-func (sC *ServiceClient) ProtoFiles() map[string]string {
-	return sC.ServiceMetadata.ProtoFiles
-}
-
-// Close releases the underlying gRPC connection. It is safe to call multiple times.
-func (sC *ServiceClient) Close() {
-	_ = sC.GRPC.Close()
-}
-
-// Heartbeat performs a simple HTTP GET against "<first-endpoint>/heartbeat" and
-// returns the decoded JSON payload on HTTP 200. A non-200 response yields an error.
-func (sC *ServiceClient) Heartbeat() (any, error) {
-	resp, err := http.Get(sC.CurrentServiceGroup.Endpoints[0] + "/heartbeat")
-	if err != nil {
-		return nil, err
-	}
-	defer func(Body io.ReadCloser) {
-		err = Body.Close()
-		if err != nil {
-			zap.L().Error("failed to close heartbeat", zap.Error(err))
-		}
-	}(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.New("heartbeat failed")
-	}
-	var result any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode heartbeat response: %w", err)
-	}
-
-	return result, nil
 }
 
 // optionalUint64 returns a pointer to the first value if provided, or nil.

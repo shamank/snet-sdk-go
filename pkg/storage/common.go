@@ -19,30 +19,46 @@ const (
 	FilecoinPrefix = "filecoin://"
 )
 
-// storage is a minimal interface for backends able to fetch a blob by ID/hash.
-type storage interface {
+// Storage is a minimal interface for backends able to fetch and store blobs by ID/hash.
+type Storage interface {
 	ReadFile(id string) ([]byte, error)
+	UploadJSON(data interface{}) (string, error)
 }
 
-// Storage aggregates the configured storage backends.
+// LighthouseFetcher fetches content from a Lighthouse gateway.
+type LighthouseFetcher interface {
+	Fetch(endpoint, cid string) ([]byte, error)
+}
+
+// IPFSFetcher fetches content addressed by CID from IPFS.
+type IPFSFetcher interface {
+	Fetch(hash string) ([]byte, error)
+}
+
+// Client aggregates the configured storage backends.
 //
 // Note: The field name LighthouseUrl is kept for backward compatibility,
 // even though the idiomatic Go name would be LighthouseURL.
-type Storage struct {
+type Client struct {
 	// HttpApi is a connected Kubo HTTP API client used for IPFS reads.
 	*rpc.HttpApi
 	// LighthouseUrl is the base URL of the Lighthouse HTTP gateway.
 	LighthouseUrl string
+
+	lighthouseFetcher LighthouseFetcher
+	ipfsFetcher       IPFSFetcher
 }
 
 // NewStorage constructs a Storage helper using the provided IPFS API endpoint
 // and Lighthouse gateway URL. If the IPFS client fails to initialize, the error
 // is logged and the returned struct may have a nil HttpApi.
-func NewStorage(ipfsURL, lighthouseURL string) *Storage {
+func NewStorage(ipfsURL, lighthouseURL string) *Client {
 	var err error
-	s := new(Storage)
+	s := new(Client)
 	s.HttpApi, err = NewIPFSClient(ipfsURL)
 	s.LighthouseUrl = lighthouseURL
+	s.lighthouseFetcher = defaultLighthouseFetcher{}
+	s.ipfsFetcher = newIPFSFetcher(s.HttpApi)
 	if err != nil {
 		zap.L().Error(err.Error())
 	}
@@ -53,13 +69,26 @@ func NewStorage(ipfsURL, lighthouseURL string) *Storage {
 // the "filecoin://" prefix, it is retrieved via the Lighthouse gateway;
 // otherwise, the content is fetched from IPFS using the Kubo client.
 // The hash/URI is normalized with formatHash before retrieval.
-func (s *Storage) ReadFile(hash string) (rawFile []byte, err error) {
+func (s *Client) ReadFile(hash string) (rawFile []byte, err error) {
+	if s.lighthouseFetcher == nil {
+		s.lighthouseFetcher = defaultLighthouseFetcher{}
+	}
+	if s.ipfsFetcher == nil {
+		s.ipfsFetcher = newIPFSFetcher(s.HttpApi)
+	}
+
 	if strings.HasPrefix(hash, FilecoinPrefix) {
-		rawFile, err = GetLighthouseFile(s.LighthouseUrl, formatHash(hash))
+		rawFile, err = s.lighthouseFetcher.Fetch(s.LighthouseUrl, formatHash(hash))
 	} else {
-		rawFile, err = s.GetFileFromIPFS(formatHash(hash))
+		rawFile, err = s.ipfsFetcher.Fetch(formatHash(hash))
 	}
 	return rawFile, err
+}
+
+type defaultLighthouseFetcher struct{}
+
+func (defaultLighthouseFetcher) Fetch(endpoint, cid string) ([]byte, error) {
+	return GetLighthouseFile(endpoint, cid)
 }
 
 // formatHash removes known URI scheme prefixes and any non-alphanumeric

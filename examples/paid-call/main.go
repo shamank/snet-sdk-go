@@ -13,9 +13,10 @@ func main() {
 
 	// new config
 	c := config.Config{
-		RPCAddr:    "wss://sepolia.infura.io/ws/v3/",
-		PrivateKey: "TODO",
+		RPCAddr:    "https://sepolia.infura.io/v3/",
+		PrivateKey: "",
 		Debug:      true,
+		Network:    config.Sepolia,
 	}
 
 	// creating new SDK core
@@ -29,16 +30,16 @@ func main() {
 
 	err = service.SetPaidPaymentStrategy()
 	if err != nil {
-		log.Println("SetFreePaymentStrategy: ", err)
+		log.Println("SetPaymentStrategy: ", err)
 		return
 	}
 
-	resp, err := service.CallWithMap("basic_stt", map[string]any{"text": "1"})
+	resp, err := service.CallWithJSON("", []byte(`{"text"":"test"}`))
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	fmt.Printf("\nResponse from service: %v", resp)
+	fmt.Printf("\nResponse from service: %v", string(resp))
 
 	service.Close()
 	snetSDK.Close()

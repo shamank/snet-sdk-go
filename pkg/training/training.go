@@ -1,4 +1,7 @@
-//go:generate protoc --go-grpc_opt=paths=source_relative --go_opt=paths=source_relative --go_out=. --go-grpc_out=. --proto_path=. *.proto
+//go:generate protoc --go-grpc_opt=paths=source_relative --go_opt=paths=source_relative --go_out=. --go-grpc_out=. --proto_path=. training.proto training_daemon.proto
+
+// Package training provides a client for interacting with SingularityNET training daemons.
+// It allows users to manage AI models, retrieve training metadata, and perform model-related operations.
 package training
 
 import (
@@ -17,19 +20,28 @@ import (
 	"go.uber.org/zap"
 )
 
+// Client defines the interface for training-related operations.
 type Client interface {
+	// GetMetadata retrieves training daemon metadata
 	GetMetadata() (*TrainingMetadata, error)
+	// GetAllModels retrieves all available models
 	GetAllModels() (*ModelsResponse, error)
+	// GetModel retrieves a specific model by ID
 	GetModel(modelId string) (*ModelResponse, error)
+	// CreateModel creates a new model with the given name and description
 	CreateModel(name, desc string) (*ModelResponse, error)
 }
 
+// TrainingClient is the concrete implementation of the Client interface
+// for training operations.
 type TrainingClient struct {
 	DaemonClient
 	privateKey         *ecdsa.PrivateKey
 	currentBlockNumber func() (*big.Int, error)
 }
 
+// NewTrainingClient creates a new training client with the provided gRPC client,
+// private key for signing requests, and a function to retrieve the current block number.
 func NewTrainingClient(client *grpc.Client, priv *ecdsa.PrivateKey, currentBlockNumber func() (*big.Int, error)) *TrainingClient {
 	return &TrainingClient{
 		DaemonClient:       NewDaemonClient(client.GRPC),
@@ -38,6 +50,7 @@ func NewTrainingClient(client *grpc.Client, priv *ecdsa.PrivateKey, currentBlock
 	}
 }
 
+// GetMetadata retrieves training daemon metadata including supported operations.
 func (c *TrainingClient) GetMetadata() (*TrainingMetadata, error) {
 	metadata, err := c.GetTrainingMetadata(context.Background(), nil)
 	if err != nil {
@@ -46,6 +59,8 @@ func (c *TrainingClient) GetMetadata() (*TrainingMetadata, error) {
 	return metadata, nil
 }
 
+// GetAllModels retrieves all available models from the training daemon.
+// The request is authenticated with the client's private key.
 func (c *TrainingClient) GetAllModels() (*ModelsResponse, error) {
 
 	block, err := c.currentBlockNumber()
@@ -76,6 +91,8 @@ func (c *TrainingClient) GetAllModels() (*ModelsResponse, error) {
 	return resp, nil
 }
 
+// GetModel retrieves a specific model by its ID from the training daemon.
+// The request is authenticated with the client's private key.
 func (c *TrainingClient) GetModel(modelId string) (*ModelResponse, error) {
 
 	block, err := c.currentBlockNumber()
@@ -99,6 +116,8 @@ func (c *TrainingClient) GetModel(modelId string) (*ModelResponse, error) {
 	return resp, nil
 }
 
+// CreateModel creates a new model with the specified name and description.
+// The request is authenticated with the client's private key.
 func (c *TrainingClient) CreateModel(name, desc string) (*ModelResponse, error) {
 
 	block, err := c.currentBlockNumber()
@@ -132,6 +151,7 @@ func (c *TrainingClient) CreateModel(name, desc string) (*ModelResponse, error) 
 	return resp, nil
 }
 
+// newAuth creates authorization details for a training daemon request.
 func newAuth(addr, msg string, blockNumber uint64, signature []byte) *AuthorizationDetails {
 	return &AuthorizationDetails{
 		CurrentBlock:  blockNumber,
@@ -141,6 +161,8 @@ func newAuth(addr, msg string, blockNumber uint64, signature []byte) *Authorizat
 	}
 }
 
+// getSignature generates an Ethereum-style signature for a training method call.
+// The signature is computed over a message containing the method name, signer address, and block number.
 func getSignature(methodName string, blockNumber *big.Int, privateKey *ecdsa.PrivateKey) (signature []byte, err error) {
 	message := bytes.Join([][]byte{
 		[]byte(methodName),

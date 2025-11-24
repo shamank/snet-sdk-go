@@ -4,8 +4,13 @@
 package config
 
 import (
+	"crypto/ecdsa"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
+
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 // Config holds all SDK settings required to initialize blockchain and service clients.
@@ -15,6 +20,8 @@ type Config struct {
 	Network Network `json:"network" yaml:"network"`
 	// RPCAddr is the Ethereum RPC/WS endpoint URL (required).
 	RPCAddr string `json:"rpc_addr" yaml:"rpc_addr"`
+	// RPCAddr is the Ethereum RPC/WS endpoint URL (required).
+	RegistryAddr string `json:"registry_addr" yaml:"registry_addr"`
 	// PrivateKey is the hex-encoded ECDSA private key used for signed operations
 	// (optional if you only do free calls / read-only operations).
 	PrivateKey string `json:"private_key" yaml:"private_key"`
@@ -28,6 +35,9 @@ type Config struct {
 	Debug bool `json:"debug" yaml:"debug"`
 	// Timeouts configures per-operation timeouts. See Timeouts.WithDefaults for defaults.
 	Timeouts Timeouts `json:"timeouts" yaml:"timeouts"`
+
+	// privateKeyECDSA is the parsed ECDSA private key (lazy-loaded on first access)
+	privateKeyECDSA *ecdsa.PrivateKey
 }
 
 // Network describes a blockchain network (chain ID and name). ChainID is used
@@ -97,13 +107,13 @@ func (c *Config) Validate() error {
 func (t Timeouts) WithDefaults() Timeouts {
 	tt := t
 	if tt.Dial == 0 {
-		tt.Dial = 5 * time.Second
+		tt.Dial = 12 * time.Second
 	}
 	if tt.GRPCUnary == 0 {
-		tt.GRPCUnary = 5 * time.Second
+		tt.GRPCUnary = 12 * time.Second
 	}
 	if tt.ChainRead == 0 {
-		tt.ChainRead = 12 * time.Second
+		tt.ChainRead = 13 * time.Second
 	}
 	if tt.ChainSubmit == 0 {
 		tt.ChainSubmit = 25 * time.Second
@@ -112,10 +122,67 @@ func (t Timeouts) WithDefaults() Timeouts {
 		tt.ReceiptWait = 90 * time.Second
 	}
 	if tt.StrategyRefresh == 0 {
-		tt.StrategyRefresh = 5 * time.Second
+		tt.StrategyRefresh = 14 * time.Second
 	}
 	if tt.PaymentEnsure == 0 {
 		tt.PaymentEnsure = 120 * time.Second
 	}
 	return tt
+}
+
+// GetPrivateKey returns the parsed ECDSA private key.
+// It parses the hex string on first call and caches the result.
+// Returns nil if PrivateKey is empty (read-only mode).
+func (c *Config) GetPrivateKey() *ecdsa.PrivateKey {
+	// If key is not set - this is normal for read-only operations
+	if c.PrivateKey == "" {
+		return nil
+	}
+
+	// If already parsed - return cache
+	if c.privateKeyECDSA != nil {
+		return c.privateKeyECDSA
+	}
+
+	// Parse key
+	key, err := parsePrivateKey(c.PrivateKey)
+	if err != nil {
+		return nil
+	}
+
+	c.privateKeyECDSA = key
+	return c.privateKeyECDSA
+}
+
+// parsePrivateKey converts a hex-encoded private key string to *ecdsa.PrivateKey.
+// It handles both formats: with and without "0x" prefix.
+func parsePrivateKey(keyHex string) (*ecdsa.PrivateKey, error) {
+	// Remove 0x prefix if present
+	keyHex = strings.TrimPrefix(keyHex, "0x")
+
+	// Check length (must be 64 hex characters = 32 bytes)
+	if len(keyHex) != 64 {
+		return nil, fmt.Errorf("private key must be 32 bytes (64 hex characters), got %d", len(keyHex))
+	}
+
+	// Parse using go-ethereum crypto
+	privateKey, err := crypto.HexToECDSA(keyHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse hex private key: %w", err)
+	}
+
+	return privateKey, nil
+}
+
+// HasPrivateKey returns true if a private key is configured.
+func (c *Config) HasPrivateKey() bool {
+	return c.PrivateKey != ""
+}
+
+// RequirePrivateKey returns the private key or an error if not configured.
+func (c *Config) RequirePrivateKey() (*ecdsa.PrivateKey, error) {
+	if !c.HasPrivateKey() {
+		return nil, fmt.Errorf("private key is required for this operation")
+	}
+	return c.GetPrivateKey(), nil
 }
