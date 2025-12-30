@@ -20,7 +20,7 @@ func GetTransactOpts(chainID *big.Int, pk *ecdsa.PrivateKey) (*bind.TransactOpts
 	return opts, nil
 }
 
-// GetTransactOpts creates a transactor from the EVM client context.
+// GetTransactOptsFromEVM creates a transactor from the EVM client context.
 func (evm *EVMClient) GetTransactOpts(pk *ecdsa.PrivateKey) (*bind.TransactOpts, error) {
 	if pk == nil {
 		return nil, fmt.Errorf("private key is required for transactions")
