@@ -29,14 +29,22 @@ type Healthcheck interface {
 	HTTP() (map[string]any, error)
 }
 
-// healthcheckClient is a concrete implementation of Healthcheck
+// healthcheckClient is a concrete implementation of Healthcheck interface.
+// It provides methods to check service daemon health using different protocols.
 type healthcheckClient struct {
-	grpcClient   *grpc.Client
-	serviceGroup *model.ServiceGroup
-	config       *config.Config
+	grpcClient   *grpc.Client        // gRPC client for health check operations
+	serviceGroup *model.ServiceGroup // Service group containing endpoints
+	config       *config.Config      // SDK configuration for debug mode and settings
 }
 
-// newHealthcheckClient creates a new health check client for a service
+// newHealthcheckClient creates a new health check client for a service.
+//
+// Parameters:
+//   - grpcClient: connected gRPC client to the service daemon
+//   - serviceGroup: service group containing endpoint configuration
+//   - cfg: SDK configuration (used for debug output and timeouts)
+//
+// Returns a Healthcheck interface implementation.
 func newHealthcheckClient(grpcClient *grpc.Client, serviceGroup *model.ServiceGroup, cfg *config.Config) Healthcheck {
 	return &healthcheckClient{
 		grpcClient:   grpcClient,

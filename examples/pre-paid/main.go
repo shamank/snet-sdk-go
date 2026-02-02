@@ -9,37 +9,40 @@ import (
 )
 
 func main() {
-	// this is an example how to use SDK
-
-	// new config
+	// Create config
 	c := config.Config{
-		RPCAddr:    "wss://sepolia.infura.io/ws/v3/",
-		PrivateKey: "TODO",
+		RPCAddr:    "wss://sepolia.infura.io/ws/v3/your_infura_project_id",
+		PrivateKey: "your_private_key",
 		Debug:      true,
+		Network:    config.Sepolia,
 	}
 
-	// creating new SDK core
+	// Create SDK instance
 	snetSDK := sdk.NewSDK(&c)
 
-	service, err := snetSDK.NewServiceClient("", "", "default_group")
+	// Create service client
+	service, err := snetSDK.NewServiceClient("your_org_id", "your_service_id", "default_group")
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	err = service.SetPrePaidPaymentStrategy(111)
+	// Set pre-paid payment strategy
+	err = service.SetPrePaidPaymentStrategy(100)
 	if err != nil {
-		log.Println("SetFreePaymentStrategy: ", err)
+		log.Println(err)
 		return
 	}
 
-	resp, err := service.CallWithMap("", map[string]any{"text": "1"})
+	// Call service with map input
+	resp, err := service.CallWithMap("your_method_name", map[string]any{"text": "test"})
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	fmt.Printf("\nResponse from service: %v", resp)
 
+	// Close connections
 	service.Close()
 	snetSDK.Close()
 }

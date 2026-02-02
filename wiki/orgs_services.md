@@ -1,7 +1,11 @@
+### How to deal with services and orgs
+
+```go
+
 package main
 
 import (
-	"fmt"
+    "fmt"
 	"log"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -11,11 +15,10 @@ import (
 )
 
 func main() {
-	cfg := config.Config{
-		RPCAddr:    "wss://sepolia.infura.io/ws/v3/your_infura_project_id",
-		PrivateKey: "your_private_key",
-		Debug:      true,
-		Network:    config.Sepolia,
+    cfg := config.Config{
+        RPCAddr:    "wss://sepolia.infura.io/ws/v3/YOUR_INFURA_KEY",
+        PrivateKey: "YOUR_PRIVATE_KEY", // Required for write operations
+        Debug:      true,
 	}
 
 	core := sdk.NewSDK(&cfg)
@@ -48,7 +51,7 @@ func main() {
 		fmt.Printf("Organization created! Transaction hash: %s\n", txHash.Hex())
 	}
 
-	// Example 2: Work with existing organization
+	// Example 2: Working with existing organization
 	org, err := core.NewOrganizationClient("example-org", "default_group")
 	if err != nil {
 		log.Fatalf("Failed to create organization client: %v", err)
@@ -67,7 +70,7 @@ func main() {
 		fmt.Printf("Services in organization: %v\n", services)
 	}
 
-	// Example 3: Add members to organization
+	// Example 3: Adding members to organization
 	newMembers := []common.Address{
 		common.HexToAddress("0x0000000000000000000000000000000000000002"),
 		common.HexToAddress("0x0000000000000000000000000000000000000003"),
@@ -80,7 +83,7 @@ func main() {
 		fmt.Printf("Members added! Transaction hash: %s\n", txHash.Hex())
 	}
 
-	// Example 4: Update organization metadata
+	// Example 4: Updating organization metadata
 	updatedMetadata := &model.OrganizationMetaData{
 		OrgName: "Updated Organization Name",
 		OrgID:   "example-org",
@@ -109,7 +112,7 @@ func main() {
 		fmt.Printf("Metadata updated! Transaction hash: %s\n", txHash.Hex())
 	}
 
-	// Example 5: Create new service
+	// Example 5: Creating a new service
 	serviceMetadata := &model.ServiceMetadata{
 		Version:     1,
 		DisplayName: "My AI Service",
@@ -128,7 +131,7 @@ func main() {
 		fmt.Printf("Service created! Transaction hash: %s\n", txHash.Hex())
 	}
 
-	// Example 6: Work with existing service
+	// Example 6: Working with existing service
 	service, err := org.ServiceClient("existing-service", "default_group")
 	if err != nil {
 		log.Printf("Failed to create service client: %v", err)
@@ -159,7 +162,7 @@ func main() {
 		fmt.Printf("Service metadata updated! Transaction hash: %s\n", txHash.Hex())
 	}
 
-	// Example 7: Remove members from organization
+	// Example 7: Removing members from organization
 	membersToRemove := []common.Address{
 		common.HexToAddress("0x0000000000000000000000000000000000000003"),
 	}
@@ -171,7 +174,7 @@ func main() {
 		fmt.Printf("Members removed! Transaction hash: %s\n", txHash.Hex())
 	}
 
-	// Example 8: Change organization owner
+	// Example 8: Changing organization owner
 	newOwner := common.HexToAddress("0x0000000000000000000000000000000000000004")
 	txHash, err = org.ChangeOwner(newOwner)
 	if err != nil {
@@ -180,7 +183,7 @@ func main() {
 		fmt.Printf("Owner changed! Transaction hash: %s\n", txHash.Hex())
 	}
 
-	// Example 9: Delete service
+	// Example 9: Deleting service
 	txHash, err = service.DeleteService()
 	if err != nil {
 		log.Printf("Failed to delete service: %v", err)
@@ -188,7 +191,7 @@ func main() {
 		fmt.Printf("Service deleted! Transaction hash: %s\n", txHash.Hex())
 	}
 
-	// Example 10: Delete organization
+	// Example 10: Deleting organization
 	txHash, err = org.DeleteOrganization()
 	if err != nil {
 		log.Printf("Failed to delete organization: %v", err)
@@ -196,3 +199,4 @@ func main() {
 		fmt.Printf("Organization deleted! Transaction hash: %s\n", txHash.Hex())
 	}
 }
+```

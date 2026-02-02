@@ -76,7 +76,7 @@ func (orgClient *OrgClient) NewServiceClient(srvID, groupName string) (*ServiceC
 }
 
 // updateMetadataUri updates the service metadata URI in the Registry contract.
-// Returns the transaction hash.
+// This is a low-level method that submits a transaction without authentication.
 func (srvClient *ServiceClient) updateMetadataUri(uri string) common.Hash {
 	resp, err := srvClient.Registry.UpdateServiceRegistration(nil, StringToBytes32(srvClient.org.OrgID), StringToBytes32(srvClient.ServiceID), []byte(uri))
 	if err != nil || resp == nil {
@@ -90,8 +90,8 @@ func (srvClient *ServiceClient) updateMetadataUri(uri string) common.Hash {
 	return resp.Hash()
 }
 
-// Delete deletes the service registration from the Registry contract.
-// Returns the transaction hash.
+// Delete removes the service registration from the Registry contract.
+// This is a low-level method that submits a transaction without authentication.
 func (srvClient *ServiceClient) Delete() common.Hash {
 	resp, err := srvClient.Registry.DeleteServiceRegistration(nil, StringToBytes32(srvClient.org.OrgID), StringToBytes32(srvClient.ServiceID))
 	if err != nil || resp == nil {
@@ -105,7 +105,6 @@ func (srvClient *ServiceClient) Delete() common.Hash {
 }
 
 // Update updates the service registration in the Registry contract.
-// Returns the transaction hash.
 func (srvClient *ServiceClient) Update() common.Hash {
 	resp, err := srvClient.Registry.DeleteServiceRegistration(nil, StringToBytes32(srvClient.org.OrgID), StringToBytes32(srvClient.ServiceID))
 	if err != nil || resp == nil {

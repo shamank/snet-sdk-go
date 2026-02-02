@@ -85,6 +85,8 @@ func (s *Client) ReadFile(hash string) (rawFile []byte, err error) {
 	return rawFile, err
 }
 
+// defaultLighthouseFetcher is the production implementation of LighthouseFetcher.
+// It uses the real HTTP client to fetch content from Lighthouse gateway.
 type defaultLighthouseFetcher struct{}
 
 func (defaultLighthouseFetcher) Fetch(endpoint, cid string) ([]byte, error) {

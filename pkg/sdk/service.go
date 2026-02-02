@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -193,14 +194,10 @@ func (s *ServiceClient) strategyFactory() paymentStrategyFactory {
 	return s.strategies
 }
 
+// RawGrpc returns direct access to the gRPC client (advanced usage)
 func (s *ServiceClient) RawGrpc() *grpc.Client {
 	return s.GRPC
 }
-
-// RawGrpc returns direct access to the gRPC client (advanced usage)
-//func (s *ServiceClient) RawGrpc() *grpc.Client {
-//	return s.grpcClient
-//}
 
 func (s *ServiceClient) getBlockchainClient() *blockchain.ServiceClient {
 	return s.srvClient
@@ -313,9 +310,15 @@ func (s *ServiceClient) Training() training.Client {
 		}
 
 		s.trainingClient = training.NewTrainingClient(
+			s.OrgID,
+			s.ServiceID,
+			s.CurrentServiceGroup.GroupName,
 			s.grpcClient,
 			priv,
+			s.config.Timeouts.GRPCUnary,
+			s.config.Timeouts.GRPCStream,
 			blockNumber,
+			s.strategy,
 		)
 	}
 	return s.trainingClient
@@ -325,6 +328,10 @@ func (s *ServiceClient) Training() training.Client {
 // ensures a valid channel (funds/expiration). It does not perform a Refresh
 // because escrow calls sign per-request.
 func (s *ServiceClient) SetPaidPaymentStrategy() error {
+	if err := s.validateWebSocketRPC(); err != nil {
+		return err
+	}
+
 	ctx, cancel := s.withTimeout(context.Background(), s.ensureTimeout())
 	defer cancel()
 
@@ -349,6 +356,10 @@ func (s *ServiceClient) SetPaidPaymentStrategy() error {
 // refreshes the daemon-issued token. The count parameter indicates the number
 // of calls to provision in the initial signed allowance.
 func (s *ServiceClient) SetPrePaidPaymentStrategy(count uint64) error {
+	if err := s.validateWebSocketRPC(); err != nil {
+		return err
+	}
+
 	ctx, cancel := s.withTimeout(context.Background(), s.ensureTimeout())
 	defer cancel()
 
@@ -402,9 +413,13 @@ func (s *ServiceClient) GetFreeCallsAvailable() (uint64, error) {
 // CallWithMap invokes a method with a map-based request. Payment metadata is
 // injected by the current strategy into the outgoing context.
 func (s *ServiceClient) CallWithMap(method string, params map[string]any) (map[string]any, error) {
-	if s.strategy == nil {
-		return nil, errors.New("payment strategy not set; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy first")
+	err := s.setDefaultStrategy()
+	if err != nil {
+		return nil, fmt.Errorf("can't auto set payment strategy; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy manually %v", err)
 	}
+	//if s.strategy == nil {
+	//	return nil, errors.New("payment strategy not set; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy first")
+	//}
 
 	ctx, cancel := s.withTimeout(context.Background(), s.config.Timeouts.GRPCUnary)
 	defer cancel()
@@ -420,9 +435,13 @@ func (s *ServiceClient) CallWithMap(method string, params map[string]any) (map[s
 // CallWithJSON invokes a method with raw JSON request bytes. The JSON is mapped
 // to the protobuf input type using service descriptors.
 func (s *ServiceClient) CallWithJSON(method string, input []byte) ([]byte, error) {
-	if s.strategy == nil {
-		return nil, errors.New("payment strategy not set; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy first")
+	err := s.setDefaultStrategy()
+	if err != nil {
+		return nil, fmt.Errorf("can't auto set payment strategy; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy manually %v", err)
 	}
+	//if s.strategy == nil {
+	//	return nil, errors.New("payment strategy not set; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy first")
+	//}
 
 	ctx, cancel := s.withTimeout(context.Background(), s.config.Timeouts.GRPCUnary)
 	defer cancel()
@@ -435,12 +454,28 @@ func (s *ServiceClient) CallWithJSON(method string, input []byte) ([]byte, error
 	return resp, nil
 }
 
+func (s *ServiceClient) setDefaultStrategy() error {
+	if s.strategy != nil {
+		return nil
+	}
+	if s.CurrentServiceGroup.FreeCalls > 0 {
+		if s.SetFreePaymentStrategy() == nil {
+			return nil
+		}
+	}
+	return s.SetPaidPaymentStrategy()
+}
+
 // CallWithProto invokes a method with a concrete protobuf request message and
 // returns the protobuf response message.
 func (s *ServiceClient) CallWithProto(method string, input proto.Message) (proto.Message, error) {
-	if s.strategy == nil {
-		return nil, errors.New("payment strategy not set; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy first")
+	err := s.setDefaultStrategy()
+	if err != nil {
+		return nil, fmt.Errorf("can't auto set payment strategy; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy manually %v", err)
 	}
+	//if s.strategy == nil {
+	//	return nil, errors.New("payment strategy not set; call SetPaidPaymentStrategy, SetPrePaidPaymentStrategy, or SetFreePaymentStrategy first")
+	//}
 
 	ctx, cancel := s.withTimeout(context.Background(), s.config.Timeouts.GRPCUnary)
 	defer cancel()
@@ -520,6 +555,21 @@ func (s *ServiceClient) ensureTimeout() time.Duration {
 		return s.config.Timeouts.StrategyRefresh
 	}
 	return time.Minute
+}
+
+// validateWebSocketRPC checks that the RPCAddr uses WebSocket protocol (wss:// or ws://).
+// This validation is required for paid and prepaid strategies because they need
+// to subscribe to blockchain events.
+func (s *ServiceClient) validateWebSocketRPC() error {
+	if s.config == nil || s.config.RPCAddr == "" {
+		return fmt.Errorf("RPC address is required")
+	}
+
+	if !strings.HasPrefix(s.config.RPCAddr, "wss://") && !strings.HasPrefix(s.config.RPCAddr, "ws://") {
+		return fmt.Errorf("RPC address must use WebSocket protocol (wss:// or ws://). HTTP endpoints are not supported for paid/prepaid strategies")
+	}
+
+	return nil
 }
 
 // optionalUint64 returns a pointer to the first value if provided, or nil.

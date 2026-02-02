@@ -9,30 +9,32 @@ import (
 )
 
 func main() {
-	// new config
+	// Create config
 	c := config.Config{
-		RPCAddr: "https://sepolia.infura.io/v3/",
-		// You can unfill the private key if you do not want to call the services
-		PrivateKey: "",
+		RPCAddr:    "wss://sepolia.infura.io/ws/v3/your_infura_project_id",
+		PrivateKey: "your_private_key",
 		Debug:      true,
 		Network:    config.Sepolia,
 	}
 
-	// creating a new SDK core
+	// Create SDK instance
 	snetSDK := sdk.NewSDK(&c)
 
-	service, err := snetSDK.NewServiceClient("", "", "default_group")
+	// Create service client
+	service, err := snetSDK.NewServiceClient("your_org_id", "your_service_id", "default_group")
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
+	// Set free payment strategy
 	err = service.SetFreePaymentStrategy()
 	if err != nil {
-		log.Println("SetFreePaymentStrategy: ", err)
+		log.Println(err)
 		return
 	}
 
+	// Get count of available free calls
 	available, err := service.GetFreeCallsAvailable()
 	if err != nil {
 		log.Println(err)
@@ -40,13 +42,15 @@ func main() {
 	}
 	fmt.Printf("\nFree calls available: %v", available)
 
-	resp, err := service.CallWithMap("", map[string]any{"text": "test"})
+	// Call service with map input
+	resp, err := service.CallWithMap("your_method_name", map[string]any{"text": "test"})
 	if err != nil {
 		log.Println(err)
 		return
 	}
 	fmt.Printf("\nResponse from service: %v", resp)
 
+	// Close connections
 	service.Close()
 	snetSDK.Close()
 }

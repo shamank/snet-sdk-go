@@ -11,6 +11,7 @@ import (
 )
 
 // GetTransactOpts creates a transactor bound to the given chainID and ECDSA key.
+// The returned TransactOpts can be used to send transactions to the blockchain.
 func GetTransactOpts(chainID *big.Int, pk *ecdsa.PrivateKey) (*bind.TransactOpts, error) {
 	opts, err := bind.NewKeyedTransactorWithChainID(pk, chainID)
 	if err != nil {
@@ -20,7 +21,8 @@ func GetTransactOpts(chainID *big.Int, pk *ecdsa.PrivateKey) (*bind.TransactOpts
 	return opts, nil
 }
 
-// GetTransactOptsFromEVM creates a transactor from the EVM client context.
+// GetTransactOpts creates a transactor from the EVM client context.
+// It automatically fetches the chain ID from the connected Ethereum client.
 func (evm *EVMClient) GetTransactOpts(pk *ecdsa.PrivateKey) (*bind.TransactOpts, error) {
 	if pk == nil {
 		return nil, fmt.Errorf("private key is required for transactions")

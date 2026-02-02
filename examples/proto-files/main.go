@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/singnet/snet-sdk-go/pkg/config"
@@ -9,24 +10,23 @@ import (
 
 func main() {
 	c := config.Config{
-		RPCAddr:    "https://sepolia.infura.io/v3/",
-		PrivateKey: "",
+		RPCAddr:    "wss://sepolia.infura.io/ws/v3/your_infura_project_id",
+		PrivateKey: "your_private_key",
 		Debug:      true,
+		Network:    config.Sepolia,
 	}
 
-	// creating new SDK core
 	snetSDK := sdk.NewSDK(&c)
 
-	service, err := snetSDK.NewServiceClient("", "", "default_group")
+	service, err := snetSDK.NewServiceClient("your_org_id", "your_service_id", "default_group")
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	// just get proto files as a map
-	//protoFiles := service.ProtoFiles()
-	//fmt.Println(protoFiles)
-	//fmt.Println(protoFiles["main.proto"])
+	// Get proto files as a map
+	protoFiles := service.ProtoFiles()
+	fmt.Println(protoFiles)
 
 	err = service.ProtoFiles().Save("./files/")
 	if err != nil {

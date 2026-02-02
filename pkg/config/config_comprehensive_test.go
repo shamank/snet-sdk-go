@@ -17,10 +17,10 @@ func TestConfig_Validate_Success(t *testing.T) {
 		{
 			name: "with defaults",
 			config: &Config{
-				RPCAddr: "https://sepolia.infura.io",
+				RPCAddr: "wss://sepolia.infura.io",
 			},
 			want: Config{
-				RPCAddr:       "https://sepolia.infura.io",
+				RPCAddr:       "wss://sepolia.infura.io",
 				LighthouseURL: "https://gateway.lighthouse.storage/ipfs/",
 				IpfsURL:       "https://ipfs.singularitynet.io:443",
 				Network:       Sepolia,
@@ -29,13 +29,13 @@ func TestConfig_Validate_Success(t *testing.T) {
 		{
 			name: "with custom values",
 			config: &Config{
-				RPCAddr:       "https://mainnet.infura.io",
+				RPCAddr:       "wss://mainnet.infura.io",
 				LighthouseURL: "https://custom.lighthouse.io",
 				IpfsURL:       "https://custom.ipfs.io",
 				Network:       Main,
 			},
 			want: Config{
-				RPCAddr:       "https://mainnet.infura.io",
+				RPCAddr:       "wss://mainnet.infura.io",
 				LighthouseURL: "https://custom.lighthouse.io",
 				IpfsURL:       "https://custom.ipfs.io",
 				Network:       Main,
@@ -357,7 +357,7 @@ func TestNetwork_Presets(t *testing.T) {
 
 func TestConfig_FullWorkflow(t *testing.T) {
 	config := &Config{
-		RPCAddr:    "https://sepolia.infura.io",
+		RPCAddr:    "wss://sepolia.infura.io",
 		PrivateKey: "",
 		Debug:      true,
 	}

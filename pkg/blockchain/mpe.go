@@ -52,8 +52,9 @@ type BindOpts struct {
 	Filter   *bind.FilterOpts
 }
 
-// ctxFromBind extracts a non-nil Context from BindOpts (Watch → Call → Transact).
+// ctxFromBind extracts a non-nil Context from BindOpts in priority order (Watch → Call → Transact).
 // If none are set, it returns context.TODO() to force explicit context propagation by callers.
+// This ensures all blockchain operations have a proper context for cancellation and timeout control.
 func ctxFromBind(opts *BindOpts) context.Context {
 	switch {
 	case opts != nil && opts.Watch != nil && opts.Watch.Context != nil:
@@ -68,7 +69,8 @@ func ctxFromBind(opts *BindOpts) context.Context {
 	}
 }
 
-// withTimeout returns ctx if d <= 0, otherwise returns a child context with timeout d.
+// withTimeout returns ctx unchanged if d <= 0, otherwise returns a child context with timeout d.
+// The returned cancel function is always non-nil and should be called to release resources.
 func withTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
 	if d <= 0 {
 		return ctx, func() {}
@@ -77,6 +79,8 @@ func withTimeout(ctx context.Context, d time.Duration) (context.Context, context
 }
 
 // waitOpenID waits for a ChannelOpen event or error/cancellation and returns the opened channel ID.
+// It applies timeout d (if > 0) and selects on the event channel, error channel, or context cancellation.
+// Returns the channel ID on success or an error if watch fails or context times out.
 func waitOpenID(ctx context.Context, ch <-chan *MultiPartyEscrowChannelOpen, errc <-chan error, d time.Duration) (*big.Int, error) {
 	c, cancel := withTimeout(ctx, d)
 	defer cancel()
@@ -92,6 +96,8 @@ func waitOpenID(ctx context.Context, ch <-chan *MultiPartyEscrowChannelOpen, err
 }
 
 // waitExtendID waits for a ChannelExtend event or error/cancellation and returns the channel ID.
+// It applies timeout d (if > 0) and selects on the event channel, error channel, or context cancellation.
+// Returns the channel ID on success or an error if watch fails or context times out.
 func waitExtendID(ctx context.Context, ch <-chan *MultiPartyEscrowChannelExtend, errc <-chan error, d time.Duration) (*big.Int, error) {
 	c, cancel := withTimeout(ctx, d)
 	defer cancel()
@@ -107,6 +113,8 @@ func waitExtendID(ctx context.Context, ch <-chan *MultiPartyEscrowChannelExtend,
 }
 
 // waitAddFundsID waits for a ChannelAddFunds event or error/cancellation and returns the channel ID.
+// It applies timeout d (if > 0) and selects on the event channel, error channel, or context cancellation.
+// Returns the channel ID on success or an error if watch fails or context times out.
 func waitAddFundsID(ctx context.Context, ch <-chan *MultiPartyEscrowChannelAddFunds, errc <-chan error, d time.Duration) (*big.Int, error) {
 	c, cancel := withTimeout(ctx, d)
 	defer cancel()
@@ -122,6 +130,8 @@ func waitAddFundsID(ctx context.Context, ch <-chan *MultiPartyEscrowChannelAddFu
 }
 
 // waitDeposit waits for a DepositFunds event or error/cancellation and returns when observed.
+// It applies timeout d (if > 0) and selects on the event channel, error channel, or context cancellation.
+// Returns nil on successful deposit or an error if watch fails or context times out.
 func waitDeposit(ctx context.Context, ch <-chan *MultiPartyEscrowDepositFunds, errc <-chan error, d time.Duration) error {
 	c, cancel := withTimeout(ctx, d)
 	defer cancel()
@@ -200,7 +210,8 @@ func GetNewExpiration(currentBlockNumber, threshold *big.Int) *big.Int {
 }
 
 // watchChannelOpen subscribes to ChannelOpen events with a context-aware WatchOpts.
-// If errc is non-nil, subscription errors are forwarded there.
+// If errc is non-nil, subscription errors are forwarded there in a background goroutine.
+// The subscription must be unsubscribed by the caller to prevent goroutine leaks.
 func (evm *EVMClient) watchChannelOpen(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowChannelOpen, errc chan error, senders, recipients []common.Address, groupIDs [][32]byte) (event.Subscription, error) {
 	w := *watch
 	w.Context = ctx
@@ -226,6 +237,8 @@ func (evm *EVMClient) watchChannelOpen(ctx context.Context, watch *bind.WatchOpt
 }
 
 // watchDepositFunds subscribes to DepositFunds events and forwards errors to errc if provided.
+// If errc is non-nil, subscription errors are forwarded there in a background goroutine.
+// The subscription must be unsubscribed by the caller to prevent goroutine leaks.
 func (evm *EVMClient) watchDepositFunds(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowDepositFunds, errc chan error, senders []common.Address) (event.Subscription, error) {
 	w := *watch
 	w.Context = ctx
@@ -251,6 +264,8 @@ func (evm *EVMClient) watchDepositFunds(ctx context.Context, watch *bind.WatchOp
 }
 
 // watchChannelAddFunds subscribes to ChannelAddFunds events and forwards errors to errc if provided.
+// If errc is non-nil, subscription errors are forwarded there in a background goroutine.
+// The subscription must be unsubscribed by the caller to prevent goroutine leaks.
 func (evm *EVMClient) watchChannelAddFunds(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowChannelAddFunds, errc chan error, channelIDs []*big.Int) (event.Subscription, error) {
 	w := *watch
 	w.Context = ctx
@@ -276,6 +291,8 @@ func (evm *EVMClient) watchChannelAddFunds(ctx context.Context, watch *bind.Watc
 }
 
 // watchChannelExtend subscribes to ChannelExtend events and forwards errors to errc if provided.
+// If errc is non-nil, subscription errors are forwarded there in a background goroutine.
+// The subscription must be unsubscribed by the caller to prevent goroutine leaks.
 func (evm *EVMClient) watchChannelExtend(ctx context.Context, watch *bind.WatchOpts, out chan *MultiPartyEscrowChannelExtend, errc chan error, channelIDs []*big.Int) (event.Subscription, error) {
 	w := *watch
 	w.Context = ctx
@@ -300,9 +317,9 @@ func (evm *EVMClient) watchChannelExtend(ctx context.Context, watch *bind.WatchO
 	return sub, nil
 }
 
-// getChannelStateFromBlockchain returns a channel snapshot from MPE.Channels.
-// It returns (nil,false,err) on read error, (nil,false,err) if the record looks empty,
-// or (channel,true,nil) on success.
+// getChannelStateFromBlockchain reads the current channel state from the MPE contract.
+// It returns (nil,false,err) on read error, (nil,false,err) if the sender address is zero (invalid channel),
+// or (channel,true,nil) on success. The returned channel is a lightweight snapshot of on-chain state.
 func (evm *EVMClient) getChannelStateFromBlockchain(channelID *big.Int) (*MultiPartyEscrowChannel, bool, error) {
 	ch, err := evm.MPE.Channels(nil, channelID)
 	if err != nil {
@@ -375,13 +392,16 @@ func (evm *EVMClient) GetMPEBalance(callOpts *bind.CallOpts) (*big.Int, error) {
 	return bal, nil
 }
 
-// estimateGas returns a shallow copy of tx opts with zero GasLimit for node-side estimation.
+// estimateGas returns a shallow copy of transaction options with GasLimit set to zero.
+// This triggers automatic gas estimation by the Ethereum node, avoiding manual calculation.
 func estimateGas(wallet *bind.TransactOpts) *bind.TransactOpts {
 	return &bind.TransactOpts{From: wallet.From, Signer: wallet.Signer, Value: nil, GasLimit: 0}
 }
 
-// ensureAllowance checks token allowance(owner→spender) and, if insufficient,
-// submits Approve(max) and waits for the tx to be mined (with a 30s max backoff).
+// ensureAllowance checks the ERC-20 token allowance from owner to spender.
+// If the current allowance is less than need, it submits an Approve transaction for max uint256
+// and waits for it to be mined with exponential backoff (max 30s). This ensures the spender
+// can transfer tokens on behalf of the owner in subsequent operations.
 func (evm *EVMClient) ensureAllowance(ctx context.Context, owner, spender common.Address, need *big.Int, call *bind.CallOpts, txOpts *bind.TransactOpts) error {
 	allowance, err := evm.FetchToken.Allowance(call, owner, spender)
 	if err != nil {
@@ -398,7 +418,9 @@ func (evm *EVMClient) ensureAllowance(ctx context.Context, owner, spender common
 	return err
 }
 
-// availableAmount returns (on-chain channel value - currently signed amount).
+// availableAmount calculates the remaining funds in a payment channel.
+// Returns the difference between the on-chain channel value and the currently signed amount.
+// This represents how much value is still available for new service calls.
 func availableAmount(onchainValue, currentSigned *big.Int) *big.Int {
 	return new(big.Int).Sub(onchainValue, currentSigned)
 }

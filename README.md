@@ -6,17 +6,18 @@ Go 1.24+
 
 ### Supported features
 
-| Feature                     | Status         |
-|-----------------------------|----------------|
-| Smart contract bindings     | ✅ Done         |  
-| IPFS support                | ✅ Done         | 
-| Lighthouse support          | ✅ Done         | 
-| gRPC dynamic proto fetching | ✅ Done         | 
-| Payment strategy: free-call | ✅ Done         | 
-| Payment strategy: paid-call | ✅ Done         |
-| Payment strategy: pre-paid  | ✅ Done         |
-| Training support            | 🔄 In Progress  |
-| Examples                    | ✅ Done         |
+| Feature                     | Status |
+|-----------------------------|--------|
+| Smart contract bindings     | ✅ Done |  
+| IPFS support                | ✅ Done | 
+| Lighthouse support          | ✅ Done | 
+| gRPC dynamic proto fetching | ✅ Done | 
+| Services & orgs funcs       | ✅ Done | 
+| Payment strategy: free-call | ✅ Done | 
+| Payment strategy: paid-call | ✅ Done |
+| Payment strategy: pre-paid  | ✅ Done |
+| Training support            | ✅ Done |
+| Examples & tutorials        | ✅ Done |
 
 ---
 
@@ -28,6 +29,7 @@ snet-sdk-go/
 │   ├── generate-smart-binds/     # Smart contract bindings generator
 │   └────  main.go                # Entry point for the generator
 ├── examples/                     # Examples of using the SDK
+├── wiki/                         # Tutorials of using the SDK
 │     
 │
 ├── pkg/                          # Public packages (for SDK users)
@@ -42,3 +44,8 @@ snet-sdk-go/
 │       
 ├── go.mod
 └── README.md
+```
+
+## License
+
+MIT

@@ -88,10 +88,11 @@ type Organization interface {
 }
 
 // OrganizationClient is the concrete implementation of the Organization interface.
+// It wraps blockchain operations and provides high-level methods for organization management.
 type OrganizationClient struct {
-	config           *config.Config
-	blockchainClient *blockchain.OrgClient
-	CurrentGroup     *model.OrganizationGroup
+	config           *config.Config           // SDK configuration
+	blockchainClient *blockchain.OrgClient    // Low-level blockchain operations
+	CurrentGroup     *model.OrganizationGroup // Currently selected organization group
 }
 
 // NewOrganizationClient creates a new organization client for the specified organization and group.
@@ -178,8 +179,9 @@ func (o *OrganizationClient) AddMembers(members []common.Address) (common.Hash, 
 	return hash, nil
 }
 
-// getBlockchainClient returns direct access to the blockchain client.
-// Use with caution - for advanced use cases only.
+// getBlockchainClient returns direct access to the blockchain client for low-level operations.
+// This method is used internally by the SDK and provides access to raw blockchain interactions.
+// Warning: This method is intended for advanced use cases only.
 func (o *OrganizationClient) getBlockchainClient() *blockchain.OrgClient {
 	return o.blockchainClient
 }

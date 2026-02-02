@@ -18,9 +18,12 @@ import (
 type Config struct {
 	// Network selects the target chain (chain ID and human-readable name).
 	Network Network `json:"network" yaml:"network"`
-	// RPCAddr is the Ethereum RPC/WS endpoint URL (required).
+	// RPCAddr is the Ethereum WebSocket endpoint URL (required).
+	// For paid and prepaid payment strategies, must use wss:// or ws:// protocol
+	// because these strategies require event subscriptions from the blockchain.
+	// Free call strategies may work with HTTP/HTTPS endpoints.
 	RPCAddr string `json:"rpc_addr" yaml:"rpc_addr"`
-	// RPCAddr is the Ethereum RPC/WS endpoint URL (required).
+	// RegistryAddr is the registry contract address (optional).
 	RegistryAddr string `json:"registry_addr" yaml:"registry_addr"`
 	// PrivateKey is the hex-encoded ECDSA private key used for signed operations
 	// (optional if you only do free calls / read-only operations).
@@ -64,6 +67,7 @@ var Main = Network{
 type Timeouts struct {
 	Dial            time.Duration // gRPC/Web3 dial/connect
 	GRPCUnary       time.Duration // RPC
+	GRPCStream      time.Duration // RPC stream
 	ChainRead       time.Duration // eth_call, balance etc
 	ChainSubmit     time.Duration // send tx
 	ReceiptWait     time.Duration // wait tx
@@ -73,7 +77,8 @@ type Timeouts struct {
 
 // Validate normalizes the configuration by applying implicit defaults for
 // LighthouseURL, IpfsURL and Network (defaults to Sepolia) and verifies that
-// RPCAddr is provided. Returns an error when RPCAddr is empty.
+// RPCAddr is provided.
+// Returns an error when RPCAddr is empty.
 func (c *Config) Validate() error {
 
 	if c.LighthouseURL == "" {
@@ -107,10 +112,13 @@ func (c *Config) Validate() error {
 func (t Timeouts) WithDefaults() Timeouts {
 	tt := t
 	if tt.Dial == 0 {
-		tt.Dial = 12 * time.Second
+		tt.Dial = 15 * time.Second
 	}
 	if tt.GRPCUnary == 0 {
-		tt.GRPCUnary = 12 * time.Second
+		tt.GRPCUnary = 15 * time.Second
+	}
+	if tt.GRPCStream == 0 {
+		tt.GRPCStream = 100 * time.Second
 	}
 	if tt.ChainRead == 0 {
 		tt.ChainRead = 13 * time.Second
@@ -122,7 +130,7 @@ func (t Timeouts) WithDefaults() Timeouts {
 		tt.ReceiptWait = 90 * time.Second
 	}
 	if tt.StrategyRefresh == 0 {
-		tt.StrategyRefresh = 14 * time.Second
+		tt.StrategyRefresh = 15 * time.Second
 	}
 	if tt.PaymentEnsure == 0 {
 		tt.PaymentEnsure = 120 * time.Second

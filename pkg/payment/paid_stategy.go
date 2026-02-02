@@ -47,21 +47,33 @@ type ChannelStateClient interface {
 	ChannelState(conn *grpcconn.ClientConn, ctx context.Context, mpe common.Address, channelID, currentBlock *big.Int, key *ecdsa.PrivateKey) (*ChannelStateReply, error)
 }
 
-// PaidStrategyDependencies groups optional overrides for blockchain/daemon access.
+// PaidStrategyDependencies groups optional overrides for blockchain and daemon access.
+// Used for dependency injection in tests to isolate PaidStrategy logic.
 type PaidStrategyDependencies struct {
 	Chain        ChainOperations
 	ChannelState ChannelStateClient
 }
 
-// PaidStrategyOption configures construction of a PaidStrategy.
+// PaidStrategyOption configures construction of a PaidStrategy using the functional options pattern.
 type PaidStrategyOption func(*paidStrategyConfig)
 
+// paidStrategyConfig holds the resolved configuration for PaidStrategy creation.
 type paidStrategyConfig struct {
-	chain        ChainOperations
-	channelState ChannelStateClient
+	chain        ChainOperations    // Blockchain operations implementation
+	channelState ChannelStateClient // Channel state client implementation
 }
 
 // WithPaidStrategyDependencies overrides default dependencies used by NewPaidStrategy.
+// This option is useful for testing to inject mocks or custom implementations.
+//
+// Example:
+//
+//	deps := PaidStrategyDependencies{
+//		Chain: mockChainOps,
+//		ChannelState: mockChannelState,
+//	}
+//	strategy, err := NewPaidStrategy(ctx, evm, grpc, meta, key, srvGroup, orgGroup,
+//		WithPaidStrategyDependencies(deps))
 func WithPaidStrategyDependencies(deps PaidStrategyDependencies) PaidStrategyOption {
 	return func(cfg *paidStrategyConfig) {
 		if deps.Chain != nil {
@@ -73,6 +85,14 @@ func WithPaidStrategyDependencies(deps PaidStrategyDependencies) PaidStrategyOpt
 	}
 }
 
+// newPaidStrategyConfig creates a configuration with default dependencies.
+// It applies the provided options to customize the configuration.
+//
+// Parameters:
+//   - evm: EVM client used for default blockchain operations
+//   - opts: optional configuration overrides
+//
+// Returns a fully configured paidStrategyConfig.
 func newPaidStrategyConfig(evm *blockchain.EVMClient, opts []PaidStrategyOption) paidStrategyConfig {
 	cfg := paidStrategyConfig{
 		chain:        defaultChainOperations{evm: evm},
@@ -84,6 +104,8 @@ func newPaidStrategyConfig(evm *blockchain.EVMClient, opts []PaidStrategyOption)
 	return cfg
 }
 
+// defaultChainOperations implements ChainOperations using a real EVMClient.
+// This is the production implementation used when no custom dependencies are provided.
 type defaultChainOperations struct {
 	evm *blockchain.EVMClient
 }
@@ -117,6 +139,8 @@ func (d defaultChainOperations) EnsurePaymentChannel(mpe common.Address, filtere
 	return d.evm.EnsurePaymentChannel(mpe, filtered, currentSigned, price, desiredExpiration, opts, chans, senders, recipients, groupIDs)
 }
 
+// defaultChannelStateClient implements ChannelStateClient using the real gRPC daemon client.
+// This is the production implementation used when no custom dependencies are provided.
 type defaultChannelStateClient struct{}
 
 func (defaultChannelStateClient) ChannelState(conn *grpcconn.ClientConn, ctx context.Context, mpe common.Address, channelID, currentBlock *big.Int, key *ecdsa.PrivateKey) (*ChannelStateReply, error) {

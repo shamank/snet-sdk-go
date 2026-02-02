@@ -101,7 +101,7 @@ func newIPFSFetcher(api *rpc.HttpApi) IPFSFetcher {
 	return &ipfsFetcher{api: api}
 }
 
-// Fetch fetches content by CID from IPFS using the configured
+// Fetch content by CID from IPFS using the configured
 // Kubo HTTP API client. The supplied hash is normalized via formatHash,
 // parsed as a CID, and retrieved via `ipfs cat`. The method then performs
 // a best-effort verification by recomputing a CID from (original CID bytes +
@@ -244,8 +244,8 @@ func (f *ipfsFetcher) Upload(data []byte) (string, error) {
 	return IpfsPrefix + addResp.Hash, nil
 }
 
-// NewIPFSClient constructs a Kubo HTTP API client pointed at url. The client
-// uses a short HTTP timeout suitable for metadata/API-source downloads.
+// NewIPFSClient constructs a Kubo HTTP API client pointed at url.
+// The client uses a short HTTP timeout suitable for metadata and API-source downloads.
 func NewIPFSClient(url string) (client *rpc.HttpApi, err error) {
 	httpClient := http.Client{
 		Timeout: 5 * time.Second,

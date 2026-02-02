@@ -126,7 +126,7 @@ func TestServiceClientSetPaidStrategyUsesFactory(t *testing.T) {
 		CurrentServiceGroup: &model.ServiceGroup{},
 		CurrentOrgGroup:     &model.OrganizationGroup{},
 		SignerPrivateKey:    nil,
-		config:              &config.Config{Timeouts: config.Timeouts{PaymentEnsure: time.Second}},
+		config:              &config.Config{RPCAddr: "wss://test.example", Timeouts: config.Timeouts{PaymentEnsure: time.Second}},
 	}
 
 	if err := sc.SetPaidPaymentStrategy(); err != nil {
@@ -157,7 +157,7 @@ func TestServiceClientSetPrepaidStrategy(t *testing.T) {
 		ServiceMetadata:     &model.ServiceMetadata{},
 		CurrentServiceGroup: &model.ServiceGroup{},
 		CurrentOrgGroup:     &model.OrganizationGroup{},
-		config:              &config.Config{Timeouts: config.Timeouts{StrategyRefresh: time.Second}},
+		config:              &config.Config{RPCAddr: "wss://test.example", Timeouts: config.Timeouts{StrategyRefresh: time.Second}},
 	}
 
 	if err := sc.SetPrePaidPaymentStrategy(3); err != nil {

@@ -247,77 +247,191 @@ func TestOptionalUint64(t *testing.T) {
 // Tests for new service management functionality - validation only
 
 func TestServiceClient_UpdateServiceMetadata_Validation(t *testing.T) {
-cfg := &config.Config{PrivateKey: ""}
-srvClient := &ServiceClient{config: cfg}
+	cfg := &config.Config{PrivateKey: ""}
+	srvClient := &ServiceClient{config: cfg}
 
-metadata := &model.ServiceMetadata{DisplayName: "Test"}
-_, err := srvClient.UpdateServiceMetadata(metadata)
+	metadata := &model.ServiceMetadata{DisplayName: "Test"}
+	_, err := srvClient.UpdateServiceMetadata(metadata)
 
-if err == nil || !containsSubstring(err.Error(), "private key not configured") {
-t.Errorf("expected 'private key not configured' error, got: %v", err)
-}
+	if err == nil || !containsSubstring(err.Error(), "private key not configured") {
+		t.Errorf("expected 'private key not configured' error, got: %v", err)
+	}
 }
 
 func TestServiceClient_DeleteService_Validation(t *testing.T) {
-cfg := &config.Config{PrivateKey: ""}
-srvClient := &ServiceClient{config: cfg}
+	cfg := &config.Config{PrivateKey: ""}
+	srvClient := &ServiceClient{config: cfg}
 
-_, err := srvClient.DeleteService()
+	_, err := srvClient.DeleteService()
 
-if err == nil || !containsSubstring(err.Error(), "private key not configured") {
-t.Errorf("expected 'private key not configured' error, got: %v", err)
-}
+	if err == nil || !containsSubstring(err.Error(), "private key not configured") {
+		t.Errorf("expected 'private key not configured' error, got: %v", err)
+	}
 }
 
 func TestServiceClient_GetServiceID(t *testing.T) {
-expectedID := "test-service-123"
-srvClient := &ServiceClient{srvClient: &blockchain.ServiceClient{ServiceID: expectedID}}
+	expectedID := "test-service-123"
+	srvClient := &ServiceClient{srvClient: &blockchain.ServiceClient{ServiceID: expectedID}}
 
-got := srvClient.GetServiceID()
+	got := srvClient.GetServiceID()
 
-if got != expectedID {
-t.Errorf("expected service ID %q, got %q", expectedID, got)
-}
+	if got != expectedID {
+		t.Errorf("expected service ID %q, got %q", expectedID, got)
+	}
 }
 
 func TestServiceClient_GetServiceMetadata(t *testing.T) {
-expectedMetadata := &model.ServiceMetadata{
-DisplayName: "Test Service",
-Version:     1,
-}
+	expectedMetadata := &model.ServiceMetadata{
+		DisplayName: "Test Service",
+		Version:     1,
+	}
 
-srvClient := &ServiceClient{
-srvClient: &blockchain.ServiceClient{
-ServiceMetadata: expectedMetadata,
-},
-}
+	srvClient := &ServiceClient{
+		srvClient: &blockchain.ServiceClient{
+			ServiceMetadata: expectedMetadata,
+		},
+	}
 
-got := srvClient.GetServiceMetadata()
+	got := srvClient.GetServiceMetadata()
 
-if got != expectedMetadata {
-t.Errorf("expected metadata %v, got %v", expectedMetadata, got)
-}
+	if got != expectedMetadata {
+		t.Errorf("expected metadata %v, got %v", expectedMetadata, got)
+	}
 }
 
 // Helper function for string matching
 func containsSubstring(s, substr string) bool {
-if len(substr) == 0 {
-return true
+	if len(substr) == 0 {
+		return true
+	}
+	if len(s) < len(substr) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		match := true
+		for j := 0; j < len(substr); j++ {
+			if s[i+j] != substr[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
 }
-if len(s) < len(substr) {
-return false
+
+// TestServiceClient_SetPaidPaymentStrategy_RequiresWebSocket verifies that SetPaidPaymentStrategy
+// validates that RPCAddr uses WebSocket protocol (wss:// or ws://).
+func TestServiceClient_SetPaidPaymentStrategy_RequiresWebSocket(t *testing.T) {
+	tests := []struct {
+		name    string
+		rpcAddr string
+	}{
+		{
+			name:    "https protocol should fail",
+			rpcAddr: "https://sepolia.infura.io",
+		},
+		{
+			name:    "http protocol should fail",
+			rpcAddr: "http://localhost:8545",
+		},
+		{
+			name:    "empty RPCAddr should fail",
+			rpcAddr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{RPCAddr: tt.rpcAddr}
+			sc := &ServiceClient{config: cfg}
+
+			err := sc.SetPaidPaymentStrategy()
+
+			if err == nil {
+				t.Fatal("expected WebSocket validation error")
+			}
+			if !containsSubstring(err.Error(), "WebSocket") && !containsSubstring(err.Error(), "RPC address") {
+				t.Fatalf("expected WebSocket or RPC address error, got: %v", err)
+			}
+		})
+	}
+
+	// Test that wss/ws protocols pass WebSocket validation
+	t.Run("wss protocol passes validation", func(t *testing.T) {
+		cfg := &config.Config{RPCAddr: "wss://sepolia.infura.io/ws"}
+		sc := &ServiceClient{config: cfg}
+		err := sc.validateWebSocketRPC()
+		if err != nil {
+			t.Fatalf("wss protocol should pass validation: %v", err)
+		}
+	})
+
+	t.Run("ws protocol passes validation", func(t *testing.T) {
+		cfg := &config.Config{RPCAddr: "ws://localhost:8546"}
+		sc := &ServiceClient{config: cfg}
+		err := sc.validateWebSocketRPC()
+		if err != nil {
+			t.Fatalf("ws protocol should pass validation: %v", err)
+		}
+	})
 }
-for i := 0; i <= len(s)-len(substr); i++ {
-match := true
-for j := 0; j < len(substr); j++ {
-if s[i+j] != substr[j] {
-match = false
-break
-}
-}
-if match {
-return true
-}
-}
-return false
+
+// TestServiceClient_SetPrePaidPaymentStrategy_RequiresWebSocket verifies that SetPrePaidPaymentStrategy
+// validates that RPCAddr uses WebSocket protocol (wss:// or ws://).
+func TestServiceClient_SetPrePaidPaymentStrategy_RequiresWebSocket(t *testing.T) {
+	tests := []struct {
+		name    string
+		rpcAddr string
+	}{
+		{
+			name:    "https protocol should fail",
+			rpcAddr: "https://sepolia.infura.io",
+		},
+		{
+			name:    "http protocol should fail",
+			rpcAddr: "http://localhost:8545",
+		},
+		{
+			name:    "empty RPCAddr should fail",
+			rpcAddr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{RPCAddr: tt.rpcAddr}
+			sc := &ServiceClient{config: cfg}
+
+			err := sc.SetPrePaidPaymentStrategy(10)
+
+			if err == nil {
+				t.Fatal("expected WebSocket validation error")
+			}
+			if !containsSubstring(err.Error(), "WebSocket") && !containsSubstring(err.Error(), "RPC address") {
+				t.Fatalf("expected WebSocket or RPC address error, got: %v", err)
+			}
+		})
+	}
+
+	// Test that wss/ws protocols pass WebSocket validation
+	t.Run("wss protocol passes validation", func(t *testing.T) {
+		cfg := &config.Config{RPCAddr: "wss://sepolia.infura.io/ws"}
+		sc := &ServiceClient{config: cfg}
+		err := sc.validateWebSocketRPC()
+		if err != nil {
+			t.Fatalf("wss protocol should pass validation: %v", err)
+		}
+	})
+
+	t.Run("ws protocol passes validation", func(t *testing.T) {
+		cfg := &config.Config{RPCAddr: "ws://localhost:8546"}
+		sc := &ServiceClient{config: cfg}
+		err := sc.validateWebSocketRPC()
+		if err != nil {
+			t.Fatalf("ws protocol should pass validation: %v", err)
+		}
+	})
 }

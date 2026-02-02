@@ -47,9 +47,8 @@ func (evm *EVMClient) NewOrgClient(orgID, groupName string) (*OrgClient, error) 
 	return &OrgClient{evm, &orgMetadata, evm.Storage, currentOrgGroup}, nil
 }
 
-// getMetadataHashRegistry returns the service metadata URI (hash) recorded
-// in the Registry for the given (orgID, srvID). It panics if the entry cannot be
-// retrieved or is not found.
+// getServiceHash retrieves the service metadata URI (hash) from the Registry contract.
+// It queries the Registry for the service registration using the organization and service IDs.
 func (orgClient *OrgClient) getServiceHash(srvID string) string {
 	orgId := StringToBytes32(orgClient.OrgID)
 	serviceId := StringToBytes32(srvID)
