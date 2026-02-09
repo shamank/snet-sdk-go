@@ -12,7 +12,7 @@ import (
 
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/linker"
-	"github.com/singnet/snet-sdk-go/pkg/model"
+	"github.com/shamank/snet-sdk-go/pkg/model"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )

@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/singnet/snet-sdk-go/pkg/blockchain"
-	"github.com/singnet/snet-sdk-go/pkg/config"
-	"github.com/singnet/snet-sdk-go/pkg/model"
+	"github.com/shamank/snet-sdk-go/pkg/blockchain"
+	"github.com/shamank/snet-sdk-go/pkg/config"
+	"github.com/shamank/snet-sdk-go/pkg/model"
 )
 
 // Mock storage for testing

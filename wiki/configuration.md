@@ -119,8 +119,8 @@ Network: config.Main     // For production
 package main
 
 import (
-	"github.com/singnet/snet-sdk-go/pkg/config"
-	"github.com/singnet/snet-sdk-go/pkg/sdk"
+	"github.com/shamank/snet-sdk-go/pkg/config"
+	"github.com/shamank/snet-sdk-go/pkg/sdk"
 )
 
 func main() {
@@ -140,8 +140,8 @@ func main() {
 
 ```go
 import (
-	"github.com/singnet/snet-sdk-go/pkg/config"
-	"github.com/singnet/snet-sdk-go/pkg/sdk"
+	"github.com/shamank/snet-sdk-go/pkg/config"
+	"github.com/shamank/snet-sdk-go/pkg/sdk"
 )
 
 func main() {
@@ -168,8 +168,8 @@ func main() {
 ```go
 import (
 	"time"
-	"github.com/singnet/snet-sdk-go/pkg/config"
-	"github.com/singnet/snet-sdk-go/pkg/sdk"
+	"github.com/shamank/snet-sdk-go/pkg/config"
+	"github.com/shamank/snet-sdk-go/pkg/sdk"
 )
 
 func main() {

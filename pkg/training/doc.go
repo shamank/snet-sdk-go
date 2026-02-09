@@ -37,7 +37,7 @@
 // # Usage Example
 //
 //	import (
-//		"github.com/singnet/snet-sdk-go/pkg/sdk"
+//		"github.com/shamank/snet-sdk-go/pkg/sdk"
 //	)
 //
 //	// Create service client

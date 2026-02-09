@@ -25,8 +25,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/singnet/snet-sdk-go/pkg/config"
-	"github.com/singnet/snet-sdk-go/pkg/sdk"
+	"github.com/shamank/snet-sdk-go/pkg/config"
+	"github.com/shamank/snet-sdk-go/pkg/sdk"
 )
 
 func main() {

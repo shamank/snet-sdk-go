@@ -54,7 +54,7 @@ If you plan to use paid services:
 ### Install the SDK
 
 ```bash
-go get -u github.com/singnet/snet-sdk-go
+go get -u github.com/shamank/snet-sdk-go
 ```
 
 ### Create a New Project
@@ -63,7 +63,7 @@ go get -u github.com/singnet/snet-sdk-go
 mkdir my-snet-project
 cd my-snet-project
 go mod init my-snet-project
-go get -u github.com/singnet/snet-sdk-go
+go get -u github.com/shamank/snet-sdk-go
 ```
 
 ---
@@ -81,8 +81,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/singnet/snet-sdk-go/pkg/config"
-	"github.com/singnet/snet-sdk-go/pkg/sdk"
+	"github.com/shamank/snet-sdk-go/pkg/config"
+	"github.com/shamank/snet-sdk-go/pkg/sdk"
 )
 ```
 
@@ -166,8 +166,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/singnet/snet-sdk-go/pkg/config"
-	"github.com/singnet/snet-sdk-go/pkg/sdk"
+	"github.com/shamank/snet-sdk-go/pkg/config"
+	"github.com/shamank/snet-sdk-go/pkg/sdk"
 )
 
 func main() {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/singnet/snet-sdk-go/internal/testutil/grpcbuf"
+	"github.com/shamank/snet-sdk-go/internal/testutil/grpcbuf"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"

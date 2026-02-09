@@ -8,7 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/singnet/snet-sdk-go/pkg/blockchain"
+	"github.com/shamank/snet-sdk-go/pkg/blockchain"
 )
 
 func mustGenerateKey(t *testing.T) *ecdsa.PrivateKey {

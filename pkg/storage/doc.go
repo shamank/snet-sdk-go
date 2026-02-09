@@ -34,7 +34,7 @@
 //
 // The Storage client provides unified access:
 //
-//	import "github.com/singnet/snet-sdk-go/pkg/storage"
+//	import "github.com/shamank/snet-sdk-go/pkg/storage"
 //
 //	client := storage.NewStorage(
 //		"https://ipfs.singularitynet.io:443",

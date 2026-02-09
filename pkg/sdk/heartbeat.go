@@ -10,9 +10,9 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/singnet/snet-sdk-go/pkg/config"
-	"github.com/singnet/snet-sdk-go/pkg/grpc"
-	"github.com/singnet/snet-sdk-go/pkg/model"
+	"github.com/shamank/snet-sdk-go/pkg/config"
+	"github.com/shamank/snet-sdk-go/pkg/grpc"
+	"github.com/shamank/snet-sdk-go/pkg/model"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/proto"

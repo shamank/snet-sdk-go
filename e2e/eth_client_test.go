@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/singnet/snet-sdk-go/pkg/blockchain"
+	"github.com/shamank/snet-sdk-go/pkg/blockchain"
 )
 
 func TestETHClientChainID(t *testing.T) {

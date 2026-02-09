@@ -118,7 +118,7 @@
 //
 //	import (
 //		"time"
-//		"github.com/singnet/snet-sdk-go/pkg/config"
+//		"github.com/shamank/snet-sdk-go/pkg/config"
 //	)
 //
 //	func loadConfig() (*config.Config, error) {

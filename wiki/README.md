@@ -88,8 +88,8 @@ Explore practical examples in the [`/examples`](../examples) directory:
 
 ### API Documentation
 
-- **[GoDoc](https://pkg.go.dev/github.com/singnet/snet-sdk-go)** - Complete API reference
-- **[GitHub Repository](https://github.com/singnet/snet-sdk-go)** - Source code and issues
+- **[GoDoc](https://pkg.go.dev/github.com/shamank/snet-sdk-go)** - Complete API reference
+- **[GitHub Repository](https://github.com/shamank/snet-sdk-go)** - Source code and issues
 
 ### External Resources
 
@@ -105,8 +105,8 @@ Explore practical examples in the [`/examples`](../examples) directory:
 ### Quick Service Call
 ```go
 import (
-    "github.com/singnet/snet-sdk-go/pkg/config"
-    "github.com/singnet/snet-sdk-go/pkg/sdk"
+    "github.com/shamank/snet-sdk-go/pkg/config"
+    "github.com/shamank/snet-sdk-go/pkg/sdk"
 )
 
 cfg := config.Config{
@@ -165,7 +165,7 @@ metadata, _ := snetSDK.GetServiceMetadata("snet", "example-service")
 
 ### Install SDK
 ```bash
-go get -u github.com/singnet/snet-sdk-go
+go get -u github.com/shamank/snet-sdk-go
 ```
 
 ### Verify Installation
@@ -232,7 +232,7 @@ service.SetPrePaidStrategy()
 - Browse [Examples](../examples) for code patterns
 
 ### Community Support
-- **GitHub Issues**: [Report bugs or request features](https://github.com/singnet/snet-sdk-go/issues)
+- **GitHub Issues**: [Report bugs or request features](https://github.com/shamank/snet-sdk-go/issues)
 - **Forum**: [Developer discussions](https://community.singularitynet.io/)
 
 ---
@@ -277,4 +277,4 @@ This SDK is released under the MIT License.
 
 **Happy coding with SingularityNET! 🚀**
 
-For questions or feedback, please open an issue on [GitHub](https://github.com/singnet/snet-sdk-go/issues).
+For questions or feedback, please open an issue on [GitHub](https://github.com/shamank/snet-sdk-go/issues).

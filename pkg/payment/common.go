@@ -12,7 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/singnet/snet-sdk-go/pkg/blockchain"
+	"github.com/shamank/snet-sdk-go/pkg/blockchain"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )

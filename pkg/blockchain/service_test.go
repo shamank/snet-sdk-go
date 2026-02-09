@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/singnet/snet-sdk-go/pkg/model"
+	"github.com/shamank/snet-sdk-go/pkg/model"
 )
 
 func TestServiceMetadataJSONParsing(t *testing.T) {

@@ -77,7 +77,7 @@
 //
 // Creating an Organization:
 //
-//	import "github.com/singnet/snet-sdk-go/pkg/sdk"
+//	import "github.com/shamank/snet-sdk-go/pkg/sdk"
 //
 //	evm := snetSDK.GetEvm()
 //	txHash, err := sdk.CreateOrganization(

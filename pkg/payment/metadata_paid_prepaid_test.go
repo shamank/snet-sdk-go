@@ -8,8 +8,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	gethcrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/singnet/snet-sdk-go/internal/testutil/grpcbuf"
-	"github.com/singnet/snet-sdk-go/pkg/model"
+	"github.com/shamank/snet-sdk-go/internal/testutil/grpcbuf"
+	"github.com/shamank/snet-sdk-go/pkg/model"
 	gmd "google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/emptypb"
 )

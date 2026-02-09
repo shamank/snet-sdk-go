@@ -62,9 +62,9 @@ import (
 	"log"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/singnet/snet-sdk-go/pkg/config"
-	"github.com/singnet/snet-sdk-go/pkg/model"
-	"github.com/singnet/snet-sdk-go/pkg/sdk"
+	"github.com/shamank/snet-sdk-go/pkg/config"
+	"github.com/shamank/snet-sdk-go/pkg/model"
+	"github.com/shamank/snet-sdk-go/pkg/sdk"
 )
 
 func main() {

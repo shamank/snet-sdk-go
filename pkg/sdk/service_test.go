@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/singnet/snet-sdk-go/pkg/blockchain"
-	"github.com/singnet/snet-sdk-go/pkg/config"
-	"github.com/singnet/snet-sdk-go/pkg/grpc"
-	"github.com/singnet/snet-sdk-go/pkg/model"
+	"github.com/shamank/snet-sdk-go/pkg/blockchain"
+	"github.com/shamank/snet-sdk-go/pkg/config"
+	"github.com/shamank/snet-sdk-go/pkg/grpc"
+	"github.com/shamank/snet-sdk-go/pkg/model"
 )
 
 func TestServiceClientSaveProtoFiles(t *testing.T) {

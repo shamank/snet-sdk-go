@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/singnet/snet-sdk-go/pkg/blockchain"
-	"github.com/singnet/snet-sdk-go/pkg/config"
-	"github.com/singnet/snet-sdk-go/pkg/grpc"
-	"github.com/singnet/snet-sdk-go/pkg/model"
-	"github.com/singnet/snet-sdk-go/pkg/payment"
-	"github.com/singnet/snet-sdk-go/pkg/training"
+	"github.com/shamank/snet-sdk-go/pkg/blockchain"
+	"github.com/shamank/snet-sdk-go/pkg/config"
+	"github.com/shamank/snet-sdk-go/pkg/grpc"
+	"github.com/shamank/snet-sdk-go/pkg/model"
+	"github.com/shamank/snet-sdk-go/pkg/payment"
+	"github.com/shamank/snet-sdk-go/pkg/training"
 	"google.golang.org/protobuf/proto"
 )
 

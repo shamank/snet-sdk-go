@@ -20,9 +20,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/singnet/snet-sdk-go/pkg/blockchain"
-	"github.com/singnet/snet-sdk-go/pkg/grpc"
-	"github.com/singnet/snet-sdk-go/pkg/payment"
+	"github.com/shamank/snet-sdk-go/pkg/blockchain"
+	"github.com/shamank/snet-sdk-go/pkg/grpc"
+	"github.com/shamank/snet-sdk-go/pkg/payment"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 )

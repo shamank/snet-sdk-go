@@ -10,9 +10,9 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/singnet/snet-sdk-go/pkg/blockchain"
-	sggrpc "github.com/singnet/snet-sdk-go/pkg/grpc"
-	"github.com/singnet/snet-sdk-go/pkg/model"
+	"github.com/shamank/snet-sdk-go/pkg/blockchain"
+	sggrpc "github.com/shamank/snet-sdk-go/pkg/grpc"
+	"github.com/shamank/snet-sdk-go/pkg/model"
 	ogrpc "google.golang.org/grpc"
 )
 

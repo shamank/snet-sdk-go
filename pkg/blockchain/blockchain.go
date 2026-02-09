@@ -18,8 +18,8 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/shamank/snet-sdk-go/pkg/storage"
 	contracts "github.com/singnet/snet-ecosystem-contracts"
-	"github.com/singnet/snet-sdk-go/pkg/storage"
 	"go.uber.org/zap"
 )
 

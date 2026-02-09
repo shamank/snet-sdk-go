@@ -1,4 +1,4 @@
-module github.com/singnet/snet-sdk-go
+module github.com/shamank/snet-sdk-go
 
 go 1.25.7
 

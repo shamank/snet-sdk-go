@@ -2,7 +2,9 @@
 
 Golang SDK for the SingularityNet AI marketplace ecosystem
 
-Go 1.24+
+### Install
+
+```go get -u github.com/shamank/snet-sdk-go```
 
 ### Supported features
 
