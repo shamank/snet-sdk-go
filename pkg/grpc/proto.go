@@ -27,7 +27,7 @@ type ProtoManager interface {
 	Get() map[string]string
 }
 
-// serviceProtoManager encapsulates the logic for working with proto files
+// serviceProtoManager encapsulates the logic for working with proto files.
 type serviceProtoManager struct {
 	serviceMetadata *model.ServiceMetadata
 }

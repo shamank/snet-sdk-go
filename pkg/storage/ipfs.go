@@ -108,7 +108,13 @@ func newIPFSFetcher(api *rpc.HttpApi) IPFSFetcher {
 // content) and comparing it with the requested CID.
 //
 // On success, it returns the file contents.
-func (f *ipfsFetcher) Fetch(hash string) (content []byte, err error) {
+func (f *ipfsFetcher) Fetch(ctx context.Context, hash string) (content []byte, err error) {
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+	}
+
 	hash = formatHash(hash)
 
 	zap.L().Debug("Hash Used to retrieve from IPFS", zap.String("hash", hash))
@@ -127,7 +133,7 @@ func (f *ipfsFetcher) Fetch(hash string) (content []byte, err error) {
 		zap.L().Error("error executing the cat command in ipfs", zap.String("hashFromMetaData", hash), zap.Error(err))
 		return
 	}
-	resp, err := req.Send(context.Background()) // TODO: use ctx timeout
+	resp, err := req.Send(ctx)
 	if err != nil {
 		zap.L().Error("error executing the cat command in ipfs", zap.String("hashFromMetaData", hash), zap.Error(err))
 		return
@@ -168,16 +174,28 @@ func (f *ipfsFetcher) Fetch(hash string) (content []byte, err error) {
 
 // GetFileFromIPFS fetches content by CID from IPFS using the configured
 // backend fetcher. It is kept for backward compatibility.
-func (c *Client) GetFileFromIPFS(hash string) ([]byte, error) {
+func (c *Client) GetFileFromIPFS(ctx context.Context, hash string) ([]byte, error) {
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+	}
+
 	if c.ipfsFetcher == nil {
 		c.ipfsFetcher = newIPFSFetcher(c.HttpApi)
 	}
-	return c.ipfsFetcher.Fetch(hash)
+	return c.ipfsFetcher.Fetch(ctx, hash)
 }
 
 // UploadJSON serializes data to JSON and uploads it to IPFS.
 // Returns the IPFS URI (ipfs://<hash>) on success.
-func (c *Client) UploadJSON(data interface{}) (string, error) {
+func (c *Client) UploadJSON(ctx context.Context, data interface{}) (string, error) {
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+	}
+
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		zap.L().Error("error marshaling data to json", zap.Error(err))
@@ -194,12 +212,18 @@ func (c *Client) UploadJSON(data interface{}) (string, error) {
 		return "", fmt.Errorf("ipfs fetcher does not support uploads")
 	}
 
-	return uploader.Upload(jsonData)
+	return uploader.Upload(ctx, jsonData)
 }
 
 // Upload uploads data to IPFS and returns the IPFS URI (ipfs://<hash>).
 // The data is added using the IPFS HTTP API 'add' command.
-func (f *ipfsFetcher) Upload(data []byte) (string, error) {
+func (f *ipfsFetcher) Upload(ctx context.Context, data []byte) (string, error) {
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+	}
+
 	if f.api == nil {
 		return "", fmt.Errorf("ipfs client not configured")
 	}
@@ -208,7 +232,7 @@ func (f *ipfsFetcher) Upload(data []byte) (string, error) {
 	req := f.api.Request("add")
 	req.Body(reader)
 
-	resp, err := req.Send(context.Background())
+	resp, err := req.Send(ctx)
 	if err != nil {
 		zap.L().Error("error uploading to ipfs", zap.Error(err))
 		return "", err

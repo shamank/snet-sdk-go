@@ -205,7 +205,7 @@ func (s *ServiceClient) getBlockchainClient() *blockchain.ServiceClient {
 
 // NewServiceClient builds a Service client from organization and blockchain service.
 // It creates a gRPC connection to the service endpoint and prepares for RPC calls.
-func (c *Core) NewServiceClient(orgID, serviceID, groupName string) (*ServiceClient, error) {
+func (c *Core) NewServiceClient(orgID, serviceID, groupName string) (Service, error) {
 
 	orgClient, err := c.NewOrganizationClient(orgID, groupName)
 	if err != nil {
@@ -497,8 +497,11 @@ func (s *ServiceClient) UpdateServiceMetadata(metadata *model.ServiceMetadata) (
 
 	bcClient := s.getBlockchainClient()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
 	// Upload metadata to IPFS
-	uri, err := bcClient.Storage.UploadJSON(metadata)
+	uri, err := bcClient.Storage.UploadJSON(ctx, metadata)
 	if err != nil {
 		return common.Hash{}, fmt.Errorf("failed to upload metadata to IPFS: %w", err)
 	}
@@ -533,6 +536,9 @@ func (s *ServiceClient) DeleteService() (common.Hash, error) {
 func (s *ServiceClient) Close() {
 	if s.grpcClient != nil {
 		_ = s.grpcClient.Close()
+	}
+	if s.EVMClient != nil {
+		s.EVMClient.Close()
 	}
 }
 

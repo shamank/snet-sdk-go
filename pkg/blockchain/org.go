@@ -1,9 +1,11 @@
 package blockchain
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/singnet/snet-sdk-go/pkg/model"
@@ -23,10 +25,12 @@ type OrgClient struct {
 // NewOrgClient creates a new organization client for the specified organization and group.
 // It fetches and parses the organization metadata from distributed storage.
 func (evm *EVMClient) NewOrgClient(orgID, groupName string) (*OrgClient, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
 	orgHash := evm.getOrgMetadataUri(orgID)
 
-	rawOrgMetadata, err := evm.Storage.ReadFile(orgHash)
+	rawOrgMetadata, err := evm.Storage.ReadFile(ctx, orgHash)
 	if err != nil {
 		return nil, fmt.Errorf("can't read orgMetadata file: %w", err)
 	}

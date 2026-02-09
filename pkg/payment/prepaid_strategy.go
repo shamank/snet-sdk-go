@@ -121,12 +121,9 @@ func (p *PrepaidStrategy) Refresh(ctx context.Context) error {
 //  7. Create strategy with token client; caller should invoke Refresh(ctx)
 //     before issuing RPC calls to obtain the token.
 //
-// Note: ctx is used for on-chain and daemon calls. The function leaves TODOs
-// for timeouts and optimization of event watching.
+// Note: ctx is used for on-chain and daemon calls. Caller should provide
+// a context with appropriate timeout (e.g., 30-60 seconds for daemon calls).
 func NewPrePaidStrategy(ctx context.Context, evm *blockchain.EVMClient, grpc *grpc.Client, mpeAddress common.Address, srvGroup *model.ServiceGroup, orgGroup *model.OrganizationGroup, privateKey string, callCount uint64) (Strategy, error) {
-
-	// TODO finish to implement me
-
 	priceInCogs := srvGroup.Pricing[0].PriceInCogs
 
 	groupID, err := blockchain.DecodePaymentGroupID(orgGroup.ID)
@@ -193,7 +190,6 @@ func NewPrePaidStrategy(ctx context.Context, evm *blockchain.EVMClient, grpc *gr
 		return nil, err
 	}
 
-	ctx = context.Background() // TODO timeout
 	channelState, err := GetChannelStateFromDaemon(grpc.GRPC, ctx, mpeAddress, channelID, currentBlockNumber, privateKeyECDSA)
 	if err != nil {
 		return nil, err

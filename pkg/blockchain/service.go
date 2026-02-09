@@ -1,9 +1,11 @@
 package blockchain
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/singnet/snet-sdk-go/pkg/model"
@@ -24,10 +26,12 @@ type ServiceClient struct {
 // NewServiceClient creates a new service client for the specified service and group.
 // It fetches and parses service metadata including proto files from distributed storage.
 func (orgClient *OrgClient) NewServiceClient(srvID, groupName string) (*ServiceClient, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
 
 	hash := orgClient.getServiceHash(srvID)
 
-	rawMetadata, err := orgClient.ReadFile(hash)
+	rawMetadata, err := orgClient.ReadFile(ctx, hash)
 	if err != nil {
 		return nil, fmt.Errorf("can't read serviceMetadata file: %w", err)
 	}
@@ -41,10 +45,10 @@ func (orgClient *OrgClient) NewServiceClient(srvID, groupName string) (*ServiceC
 
 	// Backward compatibility: older metadata may use ModelIpfsHash.
 	if serviceMetadata.ModelIpfsHash != "" {
-		rawFile, err = orgClient.ReadFile(serviceMetadata.ModelIpfsHash)
+		rawFile, err = orgClient.ReadFile(ctx, serviceMetadata.ModelIpfsHash)
 	}
 	if serviceMetadata.ServiceApiSource != "" {
-		rawFile, err = orgClient.ReadFile(serviceMetadata.ServiceApiSource)
+		rawFile, err = orgClient.ReadFile(ctx, serviceMetadata.ServiceApiSource)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("can't read api source (proto) files: %w", err)

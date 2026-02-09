@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"testing"
 )
@@ -41,7 +42,7 @@ func TestReadFileSelectsLighthouse(t *testing.T) {
 		LighthouseUrl:     "https://gw/",
 		lighthouseFetcher: fetcher,
 	}
-	data, err := s.ReadFile("filecoin://CID123")
+	data, err := s.ReadFile(context.Background(), "filecoin://CID123")
 	if err != nil {
 		t.Fatalf("ReadFile error: %v", err)
 	}
@@ -55,11 +56,11 @@ func TestReadFileSelectsLighthouse(t *testing.T) {
 
 func TestReadFileIPFSError(t *testing.T) {
 	s := &Client{
-		ipfsFetcher: ipfsFetcherFunc(func(string) ([]byte, error) {
+		ipfsFetcher: ipfsFetcherFunc(func(context.Context, string) ([]byte, error) {
 			return nil, fmt.Errorf("ipfs failure")
 		}),
 	}
-	if _, err := s.ReadFile("QmHash"); err == nil {
+	if _, err := s.ReadFile(context.Background(), "QmHash"); err == nil {
 		t.Fatal("expected error from IPFS read")
 	}
 }
@@ -70,8 +71,8 @@ func (f lighthouseFetcherFunc) Fetch(endpoint, cid string) ([]byte, error) {
 	return f(endpoint, cid)
 }
 
-type ipfsFetcherFunc func(string) ([]byte, error)
+type ipfsFetcherFunc func(context.Context, string) ([]byte, error)
 
-func (f ipfsFetcherFunc) Fetch(hash string) ([]byte, error) {
-	return f(hash)
+func (f ipfsFetcherFunc) Fetch(ctx context.Context, hash string) ([]byte, error) {
+	return f(ctx, hash)
 }

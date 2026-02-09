@@ -40,8 +40,7 @@ func main() {
 		common.HexToAddress("0x0000000000000000000000000000000000000001"),
 	}
 
-	evm := core.GetEvm()
-	txHash, err := sdk.CreateOrganization(evm, &cfg, "my-test-org", orgMetadata, members)
+	txHash, err := core.CreateOrganization("my-test-org", orgMetadata, members)
 	if err != nil {
 		log.Printf("Failed to create organization: %v", err)
 	} else {

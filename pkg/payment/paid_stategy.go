@@ -5,9 +5,11 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"errors"
+	"fmt"
 	"log"
 	"math/big"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/singnet/snet-sdk-go/pkg/blockchain"
@@ -29,6 +31,7 @@ type PaidStrategy struct {
 	channelID       *big.Int
 	nonce           *big.Int
 	signedAmount    *big.Int
+	priceInCogs     *big.Int
 	privateKeyECDSA *ecdsa.PrivateKey
 }
 
@@ -182,7 +185,7 @@ func NewPaidStrategy(
 ) (Strategy, error) {
 
 	if ctx == nil {
-		ctx = context.TODO()
+		ctx = context.Background()
 	}
 
 	cfg := newPaidStrategyConfig(evm, opts)
@@ -271,28 +274,63 @@ func NewPaidStrategy(
 
 	log.Println("channel id EnsurePaymentChannel", channelID)
 
-	signedAmount := new(big.Int).Add(currentSignedAmount, priceInCogs)
-
 	return &PaidStrategy{
 		evmClient:       evm,
 		grpcClient:      grpcCli,
 		serviceMetadata: serviceMetadata,
 		privateKeyECDSA: privateKeyECDSA,
-		signedAmount:    signedAmount,
+		signedAmount:    currentSignedAmount,
+		priceInCogs:     priceInCogs,
 		channelID:       channelID,
 		nonce:           currentNonce,
 	}, nil
 }
 
-// Refresh updates internal state if needed before making subsequent calls.
-// TODO: fetch latest nonce/signedAmount from daemon to reflect concurrent usage.
+// Refresh updates internal state (nonce, signedAmount) from daemon
+// to reflect concurrent usage of the channel by other clients.
+// After refresh, signedAmount reflects the current used amount from daemon.
 func (p *PaidStrategy) Refresh(ctx context.Context) error {
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+	}
+
+	currentBlock, err := p.evmClient.GetCurrentBlockNumberCtx(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current block number: %w", err)
+	}
+
+	mpeAddress := common.HexToAddress(p.serviceMetadata.MPEAddress)
+	channelState, err := GetChannelStateFromDaemon(
+		p.grpcClient.GRPC,
+		ctx,
+		mpeAddress,
+		p.channelID,
+		currentBlock,
+		p.privateKeyECDSA,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to get channel state from daemon: %w", err)
+	}
+
+	if b := channelState.GetCurrentNonce(); len(b) > 0 {
+		p.nonce = new(big.Int).SetBytes(b)
+	}
+
+	if b := channelState.GetCurrentSignedAmount(); len(b) > 0 {
+		p.signedAmount = new(big.Int).SetBytes(b)
+	}
+
 	return nil
 }
 
 // GRPCMetadata returns a child context carrying escrow payment headers required
 // by the daemon (channel ID, nonce, total signed amount, and the claim signature).
+// It automatically increments signedAmount by priceInCogs for each call.
 func (p *PaidStrategy) GRPCMetadata(ctx context.Context) context.Context {
+	p.signedAmount = new(big.Int).Add(p.signedAmount, p.priceInCogs)
+
 	md := metadata.Pairs(
 		PaymentTypeHeader, "escrow",
 		PaymentChannelIDHeader, p.channelID.String(),

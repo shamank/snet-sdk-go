@@ -11,6 +11,7 @@ package blockchain
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -42,7 +43,7 @@ type EVMClient struct {
 
 type Evm interface {
 	GetCurrentBlockNumber() (*big.Int, error)
-	GetOrganizations() []string
+	GetOrganizations() ([]string, error)
 	NewOrgClient(orgID, groupName string) (*OrgClient, error)
 	Close()
 }
@@ -150,13 +151,12 @@ func (evm *EVMClient) getOrgMetadataUri(orgID string) string {
 
 // GetOrganizations returns organization IDs from the on-chain Registry.
 // On error, it logs and returns nil.
-func (evm *EVMClient) GetOrganizations() []string {
+func (evm *EVMClient) GetOrganizations() ([]string, error) {
 	organizations, err := evm.Registry.ListOrganizations(nil)
 	if err != nil {
-		zap.L().Error("Failed to list organizations", zap.Error(err))
-		return nil
+		return nil, fmt.Errorf("failed to list organizations: %w", err)
 	}
-	return Bytes32ArrayToStrings(organizations)
+	return Bytes32ArrayToStrings(organizations), nil
 }
 
 func (evm *EVMClient) Close() {

@@ -9,9 +9,7 @@ Go 1.24+
 | Feature                     | Status |
 |-----------------------------|--------|
 | Smart contract bindings     | ✅ Done |  
-| IPFS support                | ✅ Done | 
-| Lighthouse support          | ✅ Done | 
-| gRPC dynamic proto fetching | ✅ Done | 
+| IPFS & Lighthouse support   | ✅ Done | 
 | Services & orgs funcs       | ✅ Done | 
 | Payment strategy: free-call | ✅ Done | 
 | Payment strategy: paid-call | ✅ Done |
@@ -20,6 +18,11 @@ Go 1.24+
 | Examples & tutorials        | ✅ Done |
 
 ---
+
+# Tutorials
+
+* [Wiki](wiki)
+* [Quick Start](wiki/quick_start.md)
 
 ## 📂 Project Structure
 
@@ -48,4 +51,4 @@ snet-sdk-go/
 
 ## License
 
-MIT
+This SDK is released under the MIT License.

@@ -24,6 +24,7 @@ func TestPaidStrategy_GRPCMetadata_HeadersAndSignature(t *testing.T) {
 		channelID:       channelID,
 		nonce:           nonce,
 		signedAmount:    amount,
+		priceInCogs:     big.NewInt(1),
 		privateKeyECDSA: priv,
 	}
 
@@ -43,8 +44,8 @@ func TestPaidStrategy_GRPCMetadata_HeadersAndSignature(t *testing.T) {
 	if got := mustOne(t, md, PaymentChannelNonceHeader); got != nonce.String() {
 		t.Fatalf("%s=%q; want %s", PaymentChannelNonceHeader, got, nonce.String())
 	}
-	if got := mustOne(t, md, PaymentChannelAmountHeader); got != amount.String() {
-		t.Fatalf("%s=%q; want %s", PaymentChannelAmountHeader, got, amount.String())
+	if got := mustOne(t, md, PaymentChannelAmountHeader); got != "778" {
+		t.Fatalf("%s=%q; want 778 (amount incremented by price)", PaymentChannelAmountHeader, got)
 	}
 
 	sig := mustOne(t, md, PaymentChannelSignatureHeader)

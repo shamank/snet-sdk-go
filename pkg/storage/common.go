@@ -5,8 +5,10 @@
 package storage
 
 import (
+	"context"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/ipfs/kubo/client/rpc"
 	"go.uber.org/zap"
@@ -21,8 +23,8 @@ const (
 
 // Storage is a minimal interface for backends able to fetch and store blobs by ID/hash.
 type Storage interface {
-	ReadFile(id string) ([]byte, error)
-	UploadJSON(data interface{}) (string, error)
+	ReadFile(ctx context.Context, id string) ([]byte, error)
+	UploadJSON(ctx context.Context, data interface{}) (string, error)
 }
 
 // LighthouseFetcher fetches content from a Lighthouse gateway.
@@ -32,7 +34,7 @@ type LighthouseFetcher interface {
 
 // IPFSFetcher fetches content addressed by CID from IPFS.
 type IPFSFetcher interface {
-	Fetch(hash string) ([]byte, error)
+	Fetch(ctx context.Context, hash string) ([]byte, error)
 }
 
 // Client aggregates the configured storage backends.
@@ -69,7 +71,13 @@ func NewStorage(ipfsURL, lighthouseURL string) *Client {
 // the "filecoin://" prefix, it is retrieved via the Lighthouse gateway;
 // otherwise, the content is fetched from IPFS using the Kubo client.
 // The hash/URI is normalized with formatHash before retrieval.
-func (s *Client) ReadFile(hash string) (rawFile []byte, err error) {
+func (s *Client) ReadFile(ctx context.Context, hash string) (rawFile []byte, err error) {
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+	}
+
 	if s.lighthouseFetcher == nil {
 		s.lighthouseFetcher = defaultLighthouseFetcher{}
 	}
@@ -80,7 +88,7 @@ func (s *Client) ReadFile(hash string) (rawFile []byte, err error) {
 	if strings.HasPrefix(hash, FilecoinPrefix) {
 		rawFile, err = s.lighthouseFetcher.Fetch(s.LighthouseUrl, formatHash(hash))
 	} else {
-		rawFile, err = s.ipfsFetcher.Fetch(formatHash(hash))
+		rawFile, err = s.ipfsFetcher.Fetch(ctx, formatHash(hash))
 	}
 	return rawFile, err
 }

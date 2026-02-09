@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"testing"
 )
 
@@ -136,48 +137,48 @@ func TestIsGzipFile(t *testing.T) {
 }
 
 func TestClient_UploadJSON_MarshalError(t *testing.T) {
-// Create data that cannot be marshaled to JSON
-data := map[string]interface{}{
-"channel": make(chan int), // channels cannot be marshaled
-}
+	// Create data that cannot be marshaled to JSON
+	data := map[string]interface{}{
+		"channel": make(chan int), // channels cannot be marshaled
+	}
 
-client := &Client{}
+	client := &Client{}
 
-_, err := client.UploadJSON(data)
+	_, err := client.UploadJSON(context.Background(), data)
 
-if err == nil {
-t.Fatal("expected error for unmarshalable data")
-}
-if !containsStr(err.Error(), "failed to marshal JSON") {
-t.Fatalf("expected marshal error, got: %v", err)
-}
+	if err == nil {
+		t.Fatal("expected error for unmarshalable data")
+	}
+	if !containsStr(err.Error(), "failed to marshal JSON") {
+		t.Fatalf("expected marshal error, got: %v", err)
+	}
 }
 
 func TestClient_UploadJSON_NoFetcher(t *testing.T) {
-client := &Client{
-ipfsFetcher: nil,
-HttpApi:     nil,
-}
+	client := &Client{
+		ipfsFetcher: nil,
+		HttpApi:     nil,
+	}
 
-data := map[string]string{"test": "data"}
+	data := map[string]string{"test": "data"}
 
-_, err := client.UploadJSON(data)
+	_, err := client.UploadJSON(context.Background(), data)
 
-if err == nil {
-t.Fatal("expected error when no fetcher configured")
-}
+	if err == nil {
+		t.Fatal("expected error when no fetcher configured")
+	}
 }
 
 // Helper to check if error message contains substring
 func containsStr(s, substr string) bool {
-return len(s) >= len(substr) && indexOfStr(s, substr) >= 0
+	return len(s) >= len(substr) && indexOfStr(s, substr) >= 0
 }
 
 func indexOfStr(s, substr string) int {
-for i := 0; i <= len(s)-len(substr); i++ {
-if s[i:i+len(substr)] == substr {
-return i
-}
-}
-return -1
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }

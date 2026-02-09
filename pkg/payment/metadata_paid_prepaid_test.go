@@ -36,6 +36,7 @@ func Test_PaidStrategy_Metadata_Propagates(t *testing.T) {
 		channelID:       big.NewInt(123),
 		nonce:           big.NewInt(9),
 		signedAmount:    big.NewInt(777),
+		priceInCogs:     big.NewInt(1),
 		privateKeyECDSA: priv,
 	}
 	ctx = ps.GRPCMetadata(ctx)

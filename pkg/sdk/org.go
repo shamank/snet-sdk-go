@@ -1,7 +1,9 @@
 package sdk
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/singnet/snet-sdk-go/pkg/blockchain"
@@ -9,39 +11,6 @@ import (
 	"github.com/singnet/snet-sdk-go/pkg/grpc"
 	"github.com/singnet/snet-sdk-go/pkg/model"
 )
-
-// CreateOrganization creates a new organization in the Registry with the given metadata.
-// It uploads the metadata to IPFS and registers the organization in the blockchain.
-// This is a package-level function that operates at the same level as service creation.
-//
-// Parameters:
-//   - evm: EVMClient for blockchain interaction
-//   - cfg: Configuration containing private key
-//   - orgID: Unique identifier for the organization
-//   - metadata: Organization metadata to upload to IPFS
-//   - members: List of member addresses for the organization
-//
-// Returns transaction hash and error if any.
-func CreateOrganization(evm *blockchain.EVMClient, cfg *config.Config, orgID string, metadata *model.OrganizationMetaData, members []common.Address) (common.Hash, error) {
-	pk := cfg.GetPrivateKey()
-	if pk == nil {
-		return common.Hash{}, fmt.Errorf("private key not configured")
-	}
-
-	// Upload metadata to IPFS
-	uri, err := evm.Storage.UploadJSON(metadata)
-	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to upload metadata to IPFS: %w", err)
-	}
-
-	// Create organization in blockchain
-	hash, err := evm.CreateOrganization(pk, orgID, []byte(uri), members)
-	if err != nil {
-		return common.Hash{}, fmt.Errorf("failed to create organization: %w", err)
-	}
-
-	return hash, nil
-}
 
 // Organization represents a high-level interface for working with an organization
 // in SingularityNET. This is the main API for SDK users.
@@ -93,25 +62,6 @@ type OrganizationClient struct {
 	config           *config.Config           // SDK configuration
 	blockchainClient *blockchain.OrgClient    // Low-level blockchain operations
 	CurrentGroup     *model.OrganizationGroup // Currently selected organization group
-}
-
-// NewOrganizationClient creates a new organization client for the specified organization and group.
-func (c *Core) NewOrganizationClient(orgID, groupName string) (Organization, error) {
-
-	client, err := c.GetEvm().NewOrgClient(orgID, groupName)
-	if err != nil {
-		return nil, err
-	}
-
-	//if orgID == nil {
-	//	return nil, fmt.Errorf("blockchain organization client is required")
-	//}
-
-	return &OrganizationClient{
-		config:           c.Config,
-		blockchainClient: client,
-		CurrentGroup:     client.CurrentOrgGroup,
-	}, nil
 }
 
 // ServiceClient creates a service client for the specified service and group within this organization.
@@ -242,8 +192,11 @@ func (o *OrganizationClient) UpdateOrgMetadataFull(metadata *model.OrganizationM
 		return common.Hash{}, fmt.Errorf("private key not configured")
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
 	// Upload metadata to IPFS
-	uri, err := o.blockchainClient.Storage.UploadJSON(metadata)
+	uri, err := o.blockchainClient.Storage.UploadJSON(ctx, metadata)
 	if err != nil {
 		return common.Hash{}, fmt.Errorf("failed to upload metadata to IPFS: %w", err)
 	}
@@ -264,8 +217,11 @@ func (o *OrganizationClient) CreateService(serviceID string, metadata *model.Ser
 		return common.Hash{}, fmt.Errorf("private key not configured")
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
 	// Upload service metadata to IPFS
-	uri, err := o.blockchainClient.Storage.UploadJSON(metadata)
+	uri, err := o.blockchainClient.Storage.UploadJSON(ctx, metadata)
 	if err != nil {
 		return common.Hash{}, fmt.Errorf("failed to upload service metadata to IPFS: %w", err)
 	}

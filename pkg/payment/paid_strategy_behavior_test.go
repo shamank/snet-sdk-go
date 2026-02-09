@@ -100,9 +100,11 @@ func TestNewPaidStrategySuccess(t *testing.T) {
 	if strategy.channelID.Cmp(big.NewInt(999)) != 0 {
 		t.Fatalf("unexpected channel ID: %s", strategy.channelID)
 	}
-	expectedSigned := new(big.Int).Add(big.NewInt(90), price)
-	if strategy.signedAmount.Cmp(expectedSigned) != 0 {
-		t.Fatalf("unexpected signed amount: %s want %s", strategy.signedAmount, expectedSigned)
+	if strategy.signedAmount.Cmp(big.NewInt(90)) != 0 {
+		t.Fatalf("unexpected signed amount: %s want 90", strategy.signedAmount)
+	}
+	if strategy.priceInCogs.Cmp(price) != 0 {
+		t.Fatalf("unexpected price: %s want %s", strategy.priceInCogs, price)
 	}
 	if strategy.nonce.Cmp(big.NewInt(2)) != 0 {
 		t.Fatalf("unexpected nonce: %s", strategy.nonce)
